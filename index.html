@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>우리나라 멸종위기 야생생물 지도 만들기</title>
+<style>
+  :root{
+    --ink:#1a2e28; --ink-soft:#4a5d56; --line:#d8e0dc; --line-soft:#e8eeeb;
+    --paper:#f4f6f4; --card:#ffffff; --accent:#2f6f5e; --accent-dark:#245546;
+    --warn-bg:#fdf3e3; --warn-ink:#8a5a1a; --warn-line:#f0d9ae;
+    --err-bg:#fbe9e7; --err-ink:#9a3226; --err-line:#f2c4bd;
+    --ok-bg:#e7f2ec; --ok-ink:#256149; --ok-line:#bcdccb;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{
+    font-family:"Pretendard","Apple SD Gothic Neo",-apple-system,BlinkMacSystemFont,"Malgun Gothic",sans-serif;
+    background:var(--paper); color:var(--ink); font-size:14px; line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px; margin:0 auto; padding:24px 20px 60px;}
+  header.page{margin-bottom:16px;}
+  header.page h1{font-size:24px; font-weight:700; letter-spacing:-0.02em; margin:0 0 6px;}
+  header.page p{margin:0; color:var(--ink-soft); font-size:13px;}
+
+  .id-bar{display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; background:var(--card);
+    border:1px solid var(--line); border-radius:12px; padding:14px 18px; margin-bottom:20px;}
+  .id-bar .f{display:flex; flex-direction:column; gap:5px;}
+  .id-bar label{font-size:12px; color:var(--ink-soft); font-weight:500; margin:0;}
+  .id-bar input{width:150px; padding:8px 11px; border:1px solid var(--line); border-radius:8px; font-size:13px; font-family:inherit;}
+  .id-bar input:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(47,111,94,.12);}
+  .save-box{margin-left:auto; display:flex; flex-direction:column; align-items:flex-end; gap:6px;}
+  .save-box .note-line{font-size:11px; color:var(--ink-soft);}
+  .save-status{font-size:11.5px; color:var(--accent); font-weight:600;}
+  .save-status.warn{color:var(--err-ink);}
+  .save-actions{display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;}
+  @media (max-width:720px){ .save-box{margin-left:0; align-items:flex-start;} .save-actions{justify-content:flex-start;} }
+  .restore-banner{display:none; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+    margin:-8px 0 20px; padding:11px 16px; border-radius:10px; font-size:13px;
+    background:var(--warn-bg); color:var(--warn-ink); border:1px solid var(--warn-line);}
+  .restore-banner.show{display:flex;}
+  .restore-banner .rb-btns{display:flex; gap:6px; flex-wrap:wrap;}
+
+  .layout{display:grid; grid-template-columns:340px 1fr; gap:20px; align-items:start;}
+  @media (max-width:920px){ .layout{grid-template-columns:1fr;} }
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px;}
+  .card h2{font-size:14px; font-weight:600; margin:0 0 14px; color:var(--ink);}
+  .card h2 .step{display:inline-flex; align-items:center; justify-content:center;
+    width:20px; height:20px; border-radius:50%; background:var(--accent); color:#fff;
+    font-size:12px; font-weight:700; margin-right:8px;}
+
+  label{display:block; font-size:12px; color:var(--ink-soft); margin:14px 0 5px; font-weight:500;}
+  input[type=text], textarea{
+    width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:8px;
+    font-size:13px; font-family:inherit; color:var(--ink); background:#fff;
+  }
+  input[type=text]:focus, textarea:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(47,111,94,.12);}
+
+  .ac{position:relative;}
+  .suggestions{position:absolute; top:calc(100% + 2px); left:0; right:0; background:#fff;
+    border:1px solid var(--line); border-radius:8px; max-height:230px; overflow-y:auto;
+    z-index:20; display:none; box-shadow:0 8px 24px rgba(26,46,40,.10);}
+  .suggestions.show{display:block;}
+  .sug{padding:8px 11px; cursor:pointer; display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--line-soft);}
+  .sug:last-child{border-bottom:none;}
+  .sug.active, .sug:hover{background:#eef4f1;}
+  .sug .nm{font-weight:500;}
+  .sug .tx{color:var(--ink-soft); font-size:11px; margin-left:auto;}
+  .sug .none{color:var(--ink-soft); font-style:italic;}
+
+  .selected-species{display:none; margin-top:12px; padding:11px 12px; border-radius:9px;
+    background:#eef4f1; border:1px solid var(--line);}
+  .selected-species.show{display:block;}
+  .selected-species .row1{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .selected-species .sp-name{font-weight:600; font-size:15px;}
+  .selected-species .sp-sci{font-style:italic; color:var(--ink-soft); font-size:12px; margin-top:3px;}
+  .pill{display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:600; color:var(--ink-soft); background:#dfe8e4;}
+  .grade{display:inline-block; padding:2px 8px; border-radius:5px; font-size:11px; font-weight:600;}
+  .grade.I{background:#7a2622; color:#fff;}
+  .grade.II{background:#b5701e; color:#fff;}
+
+  .region-box{display:none; margin-top:14px;}
+  .region-box.show{display:block;}
+  .mode-tabs{display:flex; gap:0; margin-bottom:10px; border:1px solid var(--line); border-radius:8px; overflow:hidden;}
+  .mode-tabs button{flex:1; border-radius:0; border:none; background:#fff; color:var(--ink-soft); padding:8px; font-size:12px; font-weight:600;}
+  .mode-tabs button.on{background:var(--accent); color:#fff;}
+  .hint{font-size:11px; color:var(--ink-soft); margin-bottom:8px; line-height:1.45;}
+  .region-actions{display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap;}
+  .add-guide{display:none; margin-top:14px; padding:10px 12px; border-radius:9px;
+    background:#eaf4ef; border:1px solid #bcdccb; color:#245546; font-size:12.5px;
+    font-weight:600; line-height:1.5; align-items:center; gap:8px;}
+  .add-guide.show{display:flex;}
+  .add-guide .ag-icon{font-size:16px; flex:none;}
+  .chips{display:flex; flex-wrap:wrap; gap:6px;}
+  .chip{padding:6px 11px; border:1px solid var(--line); border-radius:7px; background:#fff;
+    cursor:pointer; font-size:12px; color:var(--ink); user-select:none; transition:all .12s;}
+  .chip:hover{border-color:var(--accent);}
+  .chip.on{background:var(--accent); color:#fff; border-color:var(--accent);}
+
+  .draw-panel{display:none;}
+  .draw-panel.show{display:block;}
+  .draw-tools{display:flex; gap:8px; align-items:center; margin-top:4px;}
+  .draw-status{font-size:11px; color:var(--ink-soft); margin-top:8px;}
+
+  .msg{padding:9px 11px; border-radius:8px; font-size:12px; margin-top:12px; display:none; line-height:1.45;}
+  .msg.show{display:block;}
+  .msg.warn{background:var(--warn-bg); color:var(--warn-ink); border:1px solid var(--warn-line);}
+  .msg.err{background:var(--err-bg); color:var(--err-ink); border:1px solid var(--err-line);}
+  .msg.ok{background:var(--ok-bg); color:var(--ok-ink); border:1px solid var(--ok-line);}
+
+  .btns{display:flex; gap:8px; margin-top:16px;}
+  button{padding:9px 15px; border:1px solid transparent; border-radius:8px; font-size:13px;
+    font-family:inherit; font-weight:600; cursor:pointer; transition:all .12s;}
+  .b-primary{background:var(--accent); color:#fff;}
+  .b-primary:hover{background:var(--accent-dark);}
+  .b-primary:disabled{background:#a9c3ba; cursor:not-allowed;}
+  .b-ghost{background:#fff; color:var(--ink-soft); border-color:var(--line);}
+  .b-ghost:hover{background:#f0f3f1; color:var(--ink);}
+  .b-sm{padding:6px 11px; font-size:12px;}
+
+  .map-card{padding:18px;}
+  .map-top{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; gap:10px; flex-wrap:wrap;}
+  .map-top h2{margin:0; font-size:14px; font-weight:600;}
+  .map-top .sub{font-size:11px; color:var(--ink-soft); margin-top:2px;}
+  #stage{width:100%; position:relative;}
+  svg#map{width:100%; height:auto; max-height:88vh; display:block; touch-action:none;}
+  svg#map.drawing{cursor:crosshair;}
+  .prov{fill:#eaf0ed; stroke:#b7c6bf; stroke-width:0.7; transition:fill .12s;}
+  .prov.lit{fill:#dcece4;}
+  .plabel{font-size:12px; fill:#5f7169; text-anchor:middle; pointer-events:none; font-weight:500;}
+  .plabel-nk{font-size:16px; font-weight:600;}
+  .plabel-sm{font-size:9px;}
+  .pin{stroke:#fff; stroke-width:1.3; cursor:pointer;}
+  .drawline{fill:none; stroke-width:3.2; stroke-linecap:round; stroke-linejoin:round; pointer-events:none;}
+  .draw-hint-overlay{position:absolute; top:8px; left:50%; transform:translateX(-50%);
+    background:var(--accent); color:#fff; font-size:12px; padding:6px 14px; border-radius:20px;
+    display:none; z-index:5; box-shadow:0 4px 12px rgba(47,111,94,.3);}
+  .draw-hint-overlay.show{display:block;}
+
+  .legend{margin-top:14px; padding-top:14px; border-top:1px solid var(--line-soft);}
+  .legend .lg-title{font-size:11px; color:var(--ink-soft); margin-bottom:8px; font-weight:600;}
+  .legend .items{display:flex; flex-wrap:wrap; gap:10px;}
+  .lg{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink);}
+  .lg .d{width:11px; height:11px; border-radius:50%; flex:none;}
+  .legend .empty-lg{font-size:12px; color:var(--ink-soft);}
+
+  .list-card{margin-top:20px; grid-column:1 / -1;}
+  .list-card h2{display:flex; align-items:center; justify-content:space-between;}
+  .list-card h2 .count{font-size:12px; color:var(--ink-soft); font-weight:500;}
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th,td{text-align:left; padding:9px 10px; border-bottom:1px solid var(--line-soft);}
+  th{color:var(--ink-soft); font-weight:600; font-size:12px; background:#f7faf8;}
+  tr:last-child td{border-bottom:none;}
+  td .tdot{display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:7px; vertical-align:middle;}
+  td .rlist{color:var(--ink-soft); font-size:12px;}
+  .del{padding:4px 9px; background:#fff; border:1px solid var(--line); border-radius:6px;
+    color:var(--ink-soft); cursor:pointer; font-size:11px; font-weight:500;}
+  .del:hover{background:var(--err-bg); color:var(--err-ink); border-color:var(--err-line);}
+  .empty{text-align:center; color:var(--ink-soft); padding:26px 10px; font-size:13px;}
+  .foot{font-size:11px; color:#93a49d; margin-top:18px; text-align:center;}
+
+  /* ---------- 진행 순서 안내 ---------- */
+  .steps{list-style:none; margin:0 0 18px; padding:0; display:grid; grid-template-columns:repeat(4,1fr); gap:10px;}
+  .steps li{display:flex; gap:10px; align-items:flex-start; background:var(--card); border:1px solid var(--line);
+    border-radius:12px; padding:12px 14px; position:relative;}
+  .steps li:not(:last-child)::after{content:""; position:absolute; right:-9px; top:50%; width:8px; height:8px;
+    border-top:2px solid #9fb5ab; border-right:2px solid #9fb5ab; transform:translateY(-50%) rotate(45deg);}
+  .steps .sn{flex:none; width:24px; height:24px; border-radius:50%; background:var(--accent); color:#fff;
+    font-size:13px; font-weight:700; display:flex; align-items:center; justify-content:center;}
+  .steps b{display:block; font-size:13.5px; margin-bottom:2px;}
+  .steps span:not(.sn){display:block; font-size:12px; color:var(--ink-soft); line-height:1.45;}
+  .steps em{font-style:normal; font-weight:700; color:var(--accent-dark);}
+  .steps li.key{background:#fff7ec; border-color:#efc88f;}
+  .steps li.key .sn{background:#c2703d;}
+  .steps li.key em, .steps li.key b{color:#8a4a1c;}
+  @media (max-width:920px){ .steps{grid-template-columns:1fr 1fr;} .steps li::after{display:none;} }
+  @media (max-width:520px){ .steps{grid-template-columns:1fr;} }
+
+  /* ---------- 도 전체인지 묻는 안내 ---------- */
+  .ask{background:#f6f9f7; border:1px solid var(--line); border-radius:10px; padding:11px 12px; margin-bottom:12px;}
+  .ask-q{font-size:12.5px; font-weight:700; margin-bottom:7px;}
+  .ask-a{font-size:12px; color:var(--ink-soft); line-height:1.5; margin-top:5px;}
+  .ask-a .yes, .ask-a .no{display:inline-block; font-size:11px; font-weight:700; padding:1px 7px; border-radius:10px; margin-right:6px;}
+  .ask-a .yes{background:#dcece4; color:var(--accent-dark);}
+  .ask-a .no{background:#f6e7db; color:#8a4a1c;}
+  .ask-a #go-draw{margin-top:6px; display:block; border-color:#e3b58f; color:#8a4a1c;}
+  .ask-a #go-draw:hover{background:#fbefe4;}
+  .chip-group + .chip-group{margin-top:10px;}
+  .chip-h{font-size:11px; font-weight:700; color:var(--ink-soft); margin-bottom:5px;}
+  .chips-row{display:flex; flex-wrap:wrap; gap:6px;}
+
+  /* ---------- 그리기 도구 ---------- */
+  .tool-tabs{display:flex; gap:6px; margin-bottom:8px;}
+  .tool-tabs button{flex:1; padding:8px 6px; border-radius:8px; border:1px solid var(--line); background:#fff;
+    color:var(--ink); font-size:12.5px; line-height:1.3;}
+  .tool-tabs button small{display:block; font-size:10.5px; font-weight:500; color:var(--ink-soft); margin-top:2px;}
+  .tool-tabs button.on{border-color:var(--accent); background:#eaf4ef; box-shadow:inset 0 0 0 1px var(--accent);}
+
+  /* ---------- 지도 위 요소 ---------- */
+  #fills, #pending, #draws, #plabels{pointer-events:none;}
+  svg#map.selecting .prov{cursor:pointer;}
+  svg#map.selecting .prov:hover{fill:#c9e0d4;}
+  .prov-n{fill:#e8edf3;}
+  .prov-n.lit{fill:#dde6ef;}
+  .pending-fill{opacity:.75; stroke:#2f6f5e; stroke-width:1.2; stroke-dasharray:4,3;}
+  .drawarea{stroke-width:1.6; stroke-linejoin:round; fill-opacity:.9;}
+
+  /* ---------- 저장 버튼과 안내창 ---------- */
+  .save-wrap{display:flex; flex-direction:column; align-items:flex-end; gap:4px;}
+  .save-btn{padding:11px 20px; font-size:14px;}
+  .save-cap{font-size:11px; color:#8a4a1c; font-weight:600;}
+  .modal{position:fixed; inset:0; background:rgba(20,35,30,.45); display:none; align-items:center; justify-content:center; z-index:50; padding:16px;}
+  .modal.show{display:flex;}
+  .modal-box{background:#fff; border-radius:14px; padding:22px 22px 18px; max-width:420px; width:100%; box-shadow:0 18px 50px rgba(0,0,0,.25);}
+  .sm-title{font-size:17px; font-weight:700; margin-bottom:8px;}
+  .sm-file{font-size:13px; font-weight:600; background:#f2f6f4; border:1px solid var(--line); border-radius:8px; padding:8px 10px; word-break:break-all; margin-bottom:12px;}
+  .sm-steps{margin:0 0 12px; padding-left:20px; font-size:13px; line-height:1.7;}
+  .sm-warn{font-size:12.5px; font-weight:600; color:var(--err-ink); background:var(--err-bg); border:1px solid var(--err-line); border-radius:8px; padding:8px 10px; margin-bottom:14px;}
+  .modal-box #sm-ok{width:100%;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page">
+    <h1>우리나라 멸종위기 야생생물 지도 만들기</h1>
+    <p>국립생태원 자료에서 멸종위기 야생생물을 찾아, 서식지를 지도에 직접 표시해 보세요.</p>
+  </header>
+
+  <ol class="steps" aria-label="수행평가 진행 순서">
+    <li>
+      <span class="sn">1</span>
+      <div><b>국립생태원에서 조사</b><span>멸종위기 야생생물을 골라 <em>분포도와 본문</em>을 함께 읽어요</span></div>
+    </li>
+    <li>
+      <span class="sn">2</span>
+      <div><b>지도 하나에 모두 표시</b><span>도 전체에 살면 <em>지역 선택</em>, 도의 일부에만 살면 <em>직접 그리기</em></span></div>
+    </li>
+    <li class="key">
+      <span class="sn">3</span>
+      <div><b>‘이미지로 저장’ 버튼 누르기</b><span>화면 캡처한 사진은 안 돼요. 꼭 버튼으로 파일을 만들어요</span></div>
+    </li>
+    <li>
+      <span class="sn">4</span>
+      <div><b>리로스쿨에 올리기</b><span>저장된 이미지 파일을 올리고 나머지 질문에 답해요</span></div>
+    </li>
+  </ol>
+
+  <div class="id-bar">
+    <div class="f">
+      <label for="stu-no">학번</label>
+      <input type="text" id="stu-no" placeholder="예: 10203" autocomplete="off">
+    </div>
+    <div class="f">
+      <label for="stu-name">이름</label>
+      <input type="text" id="stu-name" placeholder="예: 홍길동" autocomplete="off">
+    </div>
+    <div class="save-box">
+      <div class="note-line">학번과 이름은 저장한 이미지 왼쪽 위에 함께 표시됩니다.</div>
+      <div class="save-status" id="save-status">작업 내용은 이 브라우저에 자동 저장됩니다.</div>
+      <div class="save-actions">
+        <button class="b-ghost b-sm" id="export-work" title="다른 컴퓨터에서 이어 하려면 이 파일을 보관하세요">작업 파일 내려받기</button>
+        <button class="b-ghost b-sm" id="import-work">작업 파일 불러오기</button>
+        <input type="file" id="import-file" accept=".json,application/json" hidden>
+      </div>
+    </div>
+  </div>
+
+  <div class="restore-banner" id="restore-banner">
+    <span id="restore-text"></span>
+    <span class="rb-btns">
+      <button class="b-ghost b-sm" id="keep-work">이어서 하기</button>
+      <button class="b-ghost b-sm" id="start-new">내 작업이 아니에요, 새로 시작</button>
+    </span>
+  </div>
+
+  <div class="layout">
+    <!-- 입력 패널 -->
+    <div class="card" id="input-card">
+      <h2>종 찾아 넣기</h2>
+
+      <label for="q">종 이름 검색</label>
+      <div class="ac">
+        <input type="text" id="q" placeholder="예: 수달, 두루미, 광릉요강꽃" autocomplete="off">
+        <div class="suggestions" id="sug"></div>
+      </div>
+
+      <div class="selected-species" id="picked">
+        <div class="row1">
+          <span class="sp-name" id="p-name"></span>
+          <span class="pill" id="p-taxon"></span>
+          <span class="grade" id="p-grade"></span>
+        </div>
+        <div class="sp-sci" id="p-sci"></div>
+      </div>
+
+      <div class="region-box" id="region-box">
+        <label style="margin-top:16px;">서식지 표시 방법</label>
+        <div class="mode-tabs">
+          <button id="tab-region" class="on">지역 선택</button>
+          <button id="tab-draw">지도에 직접 그리기</button>
+        </div>
+
+        <div id="region-mode">
+          <div class="ask">
+            <div class="ask-q">자료집 분포도에서 그 <b>도 전체</b>가 칠해져 있나요?</div>
+            <div class="ask-a"><span class="yes">예</span>아래 목록에서 고르거나 <b>지도를 눌러</b> 선택하세요.</div>
+            <div class="ask-a"><span class="no">아니요</span>도의 일부만이에요 (본문에 산, 군, 강 이름이 나와요)
+              <button class="b-ghost b-sm" id="go-draw">직접 그리기로 가기</button></div>
+          </div>
+          <div class="region-actions">
+            <button class="b-ghost b-sm" id="select-all">남한 전체 선택</button>
+            <button class="b-ghost b-sm" id="select-north">북한 전체 선택</button>
+            <button class="b-ghost b-sm" id="clear-all">선택 모두 해제</button>
+          </div>
+          <div class="chips" id="chips"></div>
+        </div>
+
+        <div class="draw-panel" id="draw-mode">
+          <div class="tool-tabs">
+            <button id="tool-area" class="on">영역 칠하기<small>도의 일부에 살 때</small></button>
+            <button id="tool-line">선 그리기<small>강이나 하천을 따라 살 때</small></button>
+          </div>
+          <div class="hint" id="tool-hint"></div>
+          <div class="draw-tools">
+            <button class="b-ghost b-sm" id="undo-draw">마지막 것 지우기</button>
+            <button class="b-ghost b-sm" id="clear-draw">모두 지우기</button>
+          </div>
+          <div class="draw-status" id="draw-status">칠한 영역 0곳, 그린 선 0개</div>
+        </div>
+      </div>
+
+      <div class="msg" id="msg"></div>
+
+      <div class="add-guide" id="add-guide">
+        <span class="ag-icon">⬇️</span>
+        <span>지역을 고르거나 지도에 그린 뒤, 아래 <b>‘지도에 추가’</b> 버튼을 눌러야 지도에 표시됩니다. 점선으로 보이는 것은 아직 추가 전이에요.</span>
+      </div>
+
+      <div class="btns">
+        <button class="b-primary" id="add" disabled>지도에 추가</button>
+        <button class="b-ghost" id="reset">전체 지우기</button>
+      </div>
+    </div>
+
+    <!-- 지도 -->
+    <div class="card map-card">
+      <div class="map-top">
+        <div>
+          <h2>서식지 분포 지도</h2>
+          <div class="sub">종마다 다른 색과 빗금으로 서식지가 표시됩니다.</div>
+        </div>
+        <div class="save-wrap">
+          <button class="b-primary save-btn" id="save">이미지로 저장</button>
+          <div class="save-cap">리로스쿨에는 이 버튼으로 만든 파일을 올려요</div>
+        </div>
+      </div>
+      <div id="stage">
+        <div class="draw-hint-overlay" id="draw-overlay">그리기 모드 · 지도 위에서 드래그하세요</div>
+      </div>
+      <div class="legend">
+        <div class="lg-title">표시한 종</div>
+        <div class="items" id="legend"><span class="empty-lg">아직 없음</span></div>
+      </div>
+    </div>
+
+    <!-- 목록 -->
+    <div class="card list-card">
+      <h2>내가 표시한 종 목록 <span class="count" id="count">0종</span></h2>
+      <div id="table-wrap">
+        <div class="empty" id="empty">아직 추가한 종이 없습니다. 왼쪽에서 종을 검색해 시작하세요.</div>
+        <table id="table" style="display:none;">
+          <thead><tr><th>종</th><th>분류군</th><th>등급</th><th>서식지</th><th></th></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">경계 자료: 국토지리정보원 시도 경계(전남광주통합특별시 반영), 북한 도 경계 Natural Earth / 종 목록: 국립생태원 멸종위기 야생생물</div>
+
+  <div class="modal" id="save-modal" role="dialog" aria-modal="true" aria-labelledby="sm-title">
+    <div class="modal-box">
+      <div class="sm-title" id="sm-title">이미지를 저장했어요</div>
+      <div class="sm-file" id="sm-file"></div>
+      <ol class="sm-steps">
+        <li>컴퓨터의 <b>다운로드</b> 폴더에서 위 이름의 파일을 찾아요.</li>
+        <li>이 파일을 그대로 <b>리로스쿨</b>에 올려요.</li>
+      </ol>
+      <button class="b-primary" id="sm-ok">확인</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SPECIES = [{"taxon": "포유류", "grade": "I", "name": "늑대", "sci": "Canis lupus coreanus"}, {"taxon": "포유류", "grade": "I", "name": "대륙사슴", "sci": "Cervus nippon hortulorum"}, {"taxon": "포유류", "grade": "I", "name": "무산쇠족제비", "sci": "Mustela nivalis"}, {"taxon": "포유류", "grade": "I", "name": "물범", "sci": "Phoca largha"}, {"taxon": "포유류", "grade": "I", "name": "반달가슴곰", "sci": "Ursus thibetanus ussuricus"}, {"taxon": "포유류", "grade": "I", "name": "붉은박쥐", "sci": "Myotis rufoniger"}, {"taxon": "포유류", "grade": "I", "name": "사향노루", "sci": "Moschus moschiferus"}, {"taxon": "포유류", "grade": "I", "name": "산양", "sci": "Naemorhedus caudatus"}, {"taxon": "포유류", "grade": "I", "name": "수달", "sci": "Lutra lutra"}, {"taxon": "포유류", "grade": "I", "name": "스라소니", "sci": "Lynx lynx"}, {"taxon": "포유류", "grade": "I", "name": "여우", "sci": "Vulpes vulpes peculiosa"}, {"taxon": "포유류", "grade": "I", "name": "작은관코박쥐", "sci": "Murina ussuriensis"}, {"taxon": "포유류", "grade": "I", "name": "표범", "sci": "Panthera pardus orientalis"}, {"taxon": "포유류", "grade": "I", "name": "호랑이", "sci": "Panthera tigris altaica"}, {"taxon": "포유류", "grade": "II", "name": "담비", "sci": "Martes flavigula"}, {"taxon": "포유류", "grade": "II", "name": "물개", "sci": "Callorhinus ursinus"}, {"taxon": "포유류", "grade": "II", "name": "삵", "sci": "Prionailurus bengalensis"}, {"taxon": "포유류", "grade": "II", "name": "큰바다사자", "sci": "Eumetopias jubatus"}, {"taxon": "포유류", "grade": "II", "name": "토끼박쥐", "sci": "Plecotus ognevi"}, {"taxon": "포유류", "grade": "II", "name": "하늘다람쥐", "sci": "Pteromys volans aluco"}, {"taxon": "조류", "grade": "I", "name": "검독수리", "sci": "Aquila chrysaetos"}, {"taxon": "조류", "grade": "I", "name": "고니", "sci": "Cygnus columbianus"}, {"taxon": "조류", "grade": "I", "name": "넓적부리도요", "sci": "Eurynorhynchus pygmeus"}, {"taxon": "조류", "grade": "I", "name": "노랑부리백로", "sci": "Egretta eulophotes"}, {"taxon": "조류", "grade": "I", "name": "느시", "sci": "Otis tarda"}, {"taxon": "조류", "grade": "I", "name": "두루미", "sci": "Grus japonensis"}, {"taxon": "조류", "grade": "I", "name": "먹황새", "sci": "Ciconia nigra"}, {"taxon": "조류", "grade": "I", "name": "뿔제비갈매기", "sci": "Thalasseus bernsteini"}, {"taxon": "조류", "grade": "I", "name": "저어새", "sci": "Platalea minor"}, {"taxon": "조류", "grade": "I", "name": "참수리", "sci": "Haliaeetus pelagicus"}, {"taxon": "조류", "grade": "I", "name": "청다리도요사촌", "sci": "Tringa guttifer"}, {"taxon": "조류", "grade": "I", "name": "크낙새", "sci": "Dryocopus javensis"}, {"taxon": "조류", "grade": "I", "name": "호사비오리", "sci": "Mergus squamatus"}, {"taxon": "조류", "grade": "I", "name": "혹고니", "sci": "Cygnus olor"}, {"taxon": "조류", "grade": "I", "name": "황새", "sci": "Ciconia boyciana"}, {"taxon": "조류", "grade": "I", "name": "흰꼬리수리", "sci": "Haliaeetus albicilla"}, {"taxon": "조류", "grade": "II", "name": "개리", "sci": "Anser cygnoides"}, {"taxon": "조류", "grade": "II", "name": "검은머리갈매기", "sci": "Larus saundersi"}, {"taxon": "조류", "grade": "II", "name": "검은머리물떼새", "sci": "Haematopus ostralegus"}, {"taxon": "조류", "grade": "II", "name": "검은머리촉새", "sci": "Emberiza aureola"}, {"taxon": "조류", "grade": "II", "name": "검은목두루미", "sci": "Grus grus"}, {"taxon": "조류", "grade": "II", "name": "고대갈매기", "sci": "Larus relictus"}, {"taxon": "조류", "grade": "II", "name": "긴꼬리딱새", "sci": "Terpsiphone atrocaudata"}, {"taxon": "조류", "grade": "II", "name": "긴점박이올빼미", "sci": "Strix uralensis"}, {"taxon": "조류", "grade": "II", "name": "까막딱다구리", "sci": "Dryocopus martius"}, {"taxon": "조류", "grade": "II", "name": "노랑부리저어새", "sci": "Platalea leucorodia"}, {"taxon": "조류", "grade": "II", "name": "독수리", "sci": "Aegypius monachus"}, {"taxon": "조류", "grade": "II", "name": "따오기", "sci": "Nipponia nippon"}, {"taxon": "조류", "grade": "II", "name": "뜸부기", "sci": "Gallicrex cinerea"}, {"taxon": "조류", "grade": "II", "name": "매", "sci": "Falco peregrinus"}, {"taxon": "조류", "grade": "II", "name": "무당새", "sci": "Emberiza sulphurata"}, {"taxon": "조류", "grade": "II", "name": "물수리", "sci": "Pandion haliaetus"}, {"taxon": "조류", "grade": "II", "name": "벌매", "sci": "Pernis ptilorhynchus"}, {"taxon": "조류", "grade": "II", "name": "붉은가슴흰죽지", "sci": "Aythya baeri"}, {"taxon": "조류", "grade": "II", "name": "붉은배새매", "sci": "Accipiter soloensis"}, {"taxon": "조류", "grade": "II", "name": "붉은어깨도요", "sci": "Calidris tenuirostris"}, {"taxon": "조류", "grade": "II", "name": "붉은해오라기", "sci": "Gorsachius goisagi"}, {"taxon": "조류", "grade": "II", "name": "뿔쇠오리", "sci": "Synthliboramphus wumizusume"}, {"taxon": "조류", "grade": "II", "name": "뿔종다리", "sci": "Galerida cristata"}, {"taxon": "조류", "grade": "II", "name": "새매", "sci": "Accipiter nisus"}, {"taxon": "조류", "grade": "II", "name": "새호리기", "sci": "Falco subbuteo"}, {"taxon": "조류", "grade": "II", "name": "섬개개비", "sci": "Locustella pleskei"}, {"taxon": "조류", "grade": "II", "name": "솔개", "sci": "Milvus migrans"}, {"taxon": "조류", "grade": "II", "name": "쇠검은머리쑥새", "sci": "Emberiza yessoensis"}, {"taxon": "조류", "grade": "II", "name": "쇠제비갈매기", "sci": "Sterna albifrons"}, {"taxon": "조류", "grade": "II", "name": "수리부엉이", "sci": "Bubo bubo"}, {"taxon": "조류", "grade": "II", "name": "시베리아흰두루미", "sci": "Grus leucogeranus"}, {"taxon": "조류", "grade": "II", "name": "알락개구리매", "sci": "Circus melanoleucos"}, {"taxon": "조류", "grade": "II", "name": "알락꼬리마도요", "sci": "Numenius madagascariensis"}, {"taxon": "조류", "grade": "II", "name": "양비둘기", "sci": "Columba rupestris"}, {"taxon": "조류", "grade": "II", "name": "올빼미", "sci": "Strix aluco"}, {"taxon": "조류", "grade": "II", "name": "재두루미", "sci": "Grus vipio"}, {"taxon": "조류", "grade": "II", "name": "잿빛개구리매", "sci": "Circus cyaneus"}, {"taxon": "조류", "grade": "II", "name": "조롱이", "sci": "Accipiter gularis"}, {"taxon": "조류", "grade": "II", "name": "참매", "sci": "Accipiter gentilis"}, {"taxon": "조류", "grade": "II", "name": "청호반새", "sci": "Halcyon pileata"}, {"taxon": "조류", "grade": "II", "name": "큰고니", "sci": "Cygnus cygnus"}, {"taxon": "조류", "grade": "II", "name": "큰기러기", "sci": "Anser fabalis"}, {"taxon": "조류", "grade": "II", "name": "큰덤불해오라기", "sci": "Ixobrychus eurhythmus"}, {"taxon": "조류", "grade": "II", "name": "큰뒷부리도요", "sci": "Limosa lapponica"}, {"taxon": "조류", "grade": "II", "name": "큰말똥가리", "sci": "Buteo hemilasius"}, {"taxon": "조류", "grade": "II", "name": "팔색조", "sci": "Pitta nympha"}, {"taxon": "조류", "grade": "II", "name": "항라머리검독수리", "sci": "Aquila clanga"}, {"taxon": "조류", "grade": "II", "name": "흑기러기", "sci": "Branta bernicla"}, {"taxon": "조류", "grade": "II", "name": "흑두루미", "sci": "Grus monacha"}, {"taxon": "조류", "grade": "II", "name": "흑비둘기", "sci": "Columba janthina"}, {"taxon": "조류", "grade": "II", "name": "흰목물떼새", "sci": "Charadrius placidus"}, {"taxon": "조류", "grade": "II", "name": "흰이마기러기", "sci": "Anser erythropus"}, {"taxon": "조류", "grade": "II", "name": "흰죽지수리", "sci": "Aquila heliaca"}, {"taxon": "양서파충류", "grade": "I", "name": "비바리뱀", "sci": "Sibynophis chinensis"}, {"taxon": "양서파충류", "grade": "I", "name": "수원청개구리", "sci": "Dryophytes suweonensis"}, {"taxon": "양서파충류", "grade": "II", "name": "고리도롱뇽", "sci": "Hynobius yangi"}, {"taxon": "양서파충류", "grade": "II", "name": "구렁이", "sci": "Elaphe schrenckii"}, {"taxon": "양서파충류", "grade": "II", "name": "금개구리", "sci": "Pelophylax chosenicus"}, {"taxon": "양서파충류", "grade": "II", "name": "남생이", "sci": "Mauremys reevesii"}, {"taxon": "양서파충류", "grade": "II", "name": "맹꽁이", "sci": "Kaloula borealis"}, {"taxon": "양서파충류", "grade": "II", "name": "표범장지뱀", "sci": "Eremias argus"}, {"taxon": "어류", "grade": "I", "name": "감돌고기", "sci": "Pseudopungtungia nigra"}, {"taxon": "어류", "grade": "I", "name": "꼬치동자개", "sci": "Pseudobagrus brevicorpus"}, {"taxon": "어류", "grade": "I", "name": "남방동사리", "sci": "Odontobutis obscura"}, {"taxon": "어류", "grade": "I", "name": "모래주사", "sci": "Microphysogobio koreensis"}, {"taxon": "어류", "grade": "I", "name": "미호종개", "sci": "Cobitis choii"}, {"taxon": "어류", "grade": "I", "name": "얼룩새코미꾸리", "sci": "Koreocobitis naktongensis"}, {"taxon": "어류", "grade": "I", "name": "여울마자", "sci": "Microphysogobio rapidus"}, {"taxon": "어류", "grade": "I", "name": "임실납자루", "sci": "Acheilognathus somjinensis"}, {"taxon": "어류", "grade": "I", "name": "좀수수치", "sci": "Kichulchoia brevifasciata"}, {"taxon": "어류", "grade": "I", "name": "퉁사리", "sci": "Liobagrus obesus"}, {"taxon": "어류", "grade": "I", "name": "흰수마자", "sci": "Gobiobotia naktongensis"}, {"taxon": "어류", "grade": "II", "name": "가는돌고기", "sci": "Pseudopungtungia tenuicorpa"}, {"taxon": "어류", "grade": "II", "name": "가시고기", "sci": "Pungitius sinensis"}, {"taxon": "어류", "grade": "II", "name": "꺽저기", "sci": "Coreoperca kawamebari"}, {"taxon": "어류", "grade": "II", "name": "꾸구리", "sci": "Gobiobotia macrocephala"}, {"taxon": "어류", "grade": "II", "name": "다묵장어", "sci": "Lethenteron reissneri"}, {"taxon": "어류", "grade": "II", "name": "돌상어", "sci": "Gobiobotia brevibarba"}, {"taxon": "어류", "grade": "II", "name": "둑중개", "sci": "Cottus koreanus"}, {"taxon": "어류", "grade": "II", "name": "묵납자루", "sci": "Acheilognathus signifer"}, {"taxon": "어류", "grade": "II", "name": "버들가지", "sci": "Rhynchocypris semotilus"}, {"taxon": "어류", "grade": "II", "name": "부안종개", "sci": "Iksookimia pumila"}, {"taxon": "어류", "grade": "II", "name": "새미", "sci": "Ladislavia taczanowskii"}, {"taxon": "어류", "grade": "II", "name": "어름치", "sci": "Hemibarbus mylodon"}, {"taxon": "어류", "grade": "II", "name": "연준모치", "sci": "Phoxinus phoxinus"}, {"taxon": "어류", "grade": "II", "name": "열목어", "sci": "Brachymystax lenok tsinlingensis"}, {"taxon": "어류", "grade": "II", "name": "칠성장어", "sci": "Lethenteron japonicus"}, {"taxon": "어류", "grade": "II", "name": "큰줄납자루", "sci": "Acheilognathus majusculus"}, {"taxon": "어류", "grade": "II", "name": "한강납줄개", "sci": "Rhodeus pseudosericeus"}, {"taxon": "어류", "grade": "II", "name": "한둑중개", "sci": "Cottus hangiongensis"}, {"taxon": "곤충", "grade": "I", "name": "닻무늬길앞잡이", "sci": "Cicindela (Abroscelis) anchoralis"}, {"taxon": "곤충", "grade": "I", "name": "붉은점모시나비", "sci": "Parnassius bremeri"}, {"taxon": "곤충", "grade": "I", "name": "비단벌레", "sci": "Chrysochroa (Chrysochroa) coreana"}, {"taxon": "곤충", "grade": "I", "name": "산굴뚝나비", "sci": "Hipparchia autonoe"}, {"taxon": "곤충", "grade": "I", "name": "상제나비", "sci": "Aporia crataegi"}, {"taxon": "곤충", "grade": "I", "name": "수염풍뎅이", "sci": "Polyphylla laticollis manchurica"}, {"taxon": "곤충", "grade": "I", "name": "장수하늘소", "sci": "Callipogon (Eoxenus) relictus"}, {"taxon": "곤충", "grade": "I", "name": "큰홍띠점박이푸른부전나비", "sci": "Sinia divina"}, {"taxon": "곤충", "grade": "II", "name": "깊은산부전나비", "sci": "Protantigius superans"}, {"taxon": "곤충", "grade": "II", "name": "노란잔산잠자리", "sci": "Macromia daimoji"}, {"taxon": "곤충", "grade": "II", "name": "대모잠자리", "sci": "Libellula angelina"}, {"taxon": "곤충", "grade": "II", "name": "두점박이사슴벌레", "sci": "Prosopocoilus astacoides blanchardi"}, {"taxon": "곤충", "grade": "II", "name": "뚱보주름메뚜기", "sci": "Haplotropis brunneriana"}, {"taxon": "곤충", "grade": "II", "name": "멋조롱박딱정벌레", "sci": "Acoptolabrus mirabilissimus mirabilissimus"}, {"taxon": "곤충", "grade": "II", "name": "물방개", "sci": "Cybister (Cybister) chinensis"}, {"taxon": "곤충", "grade": "II", "name": "물장군", "sci": "Lethocerus deyrolli"}, {"taxon": "곤충", "grade": "II", "name": "불나방", "sci": "Arctia caja"}, {"taxon": "곤충", "grade": "II", "name": "소똥구리", "sci": "Gymnopleurus (Gymnopleurus) mopsus"}, {"taxon": "곤충", "grade": "II", "name": "쌍꼬리부전나비", "sci": "Cigaritis takanonis"}, {"taxon": "곤충", "grade": "II", "name": "애기뿔소똥구리", "sci": "Copris (Copris) tripartitus"}, {"taxon": "곤충", "grade": "II", "name": "여름어리표범나비", "sci": "Mellicta ambigua"}, {"taxon": "곤충", "grade": "II", "name": "왕은점표범나비", "sci": "Argynnis nerippe"}, {"taxon": "곤충", "grade": "II", "name": "윤조롱박딱정벌레", "sci": "Acoptolabrus leechi yooni"}, {"taxon": "곤충", "grade": "II", "name": "은줄팔랑나비", "sci": "Leptalina unicolor"}, {"taxon": "곤충", "grade": "II", "name": "참호박뒤영벌", "sci": "Bombus (Megabombus) koreanus"}, {"taxon": "곤충", "grade": "II", "name": "창언조롱박딱정벌레", "sci": "Acoptolabrus changeonleei"}, {"taxon": "곤충", "grade": "II", "name": "큰자색호랑꽃무지", "sci": "Osmoderma caeleste"}, {"taxon": "곤충", "grade": "II", "name": "한국꼬마잠자리", "sci": "Nannophya koreana"}, {"taxon": "곤충", "grade": "II", "name": "홍줄나비", "sci": "Chalinga pratti"}, {"taxon": "무척추동물", "grade": "I", "name": "귀이빨대칭이", "sci": "Cristaria plicata"}, {"taxon": "무척추동물", "grade": "I", "name": "나팔고둥", "sci": "Charonia lampas"}, {"taxon": "무척추동물", "grade": "I", "name": "남방방게", "sci": "Pseudohelice subquadrata"}, {"taxon": "무척추동물", "grade": "I", "name": "두드럭조개", "sci": "Aculamprotula coreana"}, {"taxon": "무척추동물", "grade": "II", "name": "갯게", "sci": "Chasmagnathus convexus"}, {"taxon": "무척추동물", "grade": "II", "name": "거제외줄달팽이", "sci": "Satsuma myomphala"}, {"taxon": "무척추동물", "grade": "II", "name": "검붉은수지맨드라미", "sci": "Dendronephthya suensoni"}, {"taxon": "무척추동물", "grade": "II", "name": "금빛나팔돌산호", "sci": "Tubastraea coccinea"}, {"taxon": "무척추동물", "grade": "II", "name": "기수갈고둥", "sci": "Clithon retropictum"}, {"taxon": "무척추동물", "grade": "II", "name": "깃산호", "sci": "Plumarella spinosa"}, {"taxon": "무척추동물", "grade": "II", "name": "대추귀고둥", "sci": "Ellobium chinense"}, {"taxon": "무척추동물", "grade": "II", "name": "둔한진총산호", "sci": "Euplexaura crassa"}, {"taxon": "무척추동물", "grade": "II", "name": "망상맵시산호", "sci": "Echinogorgia reticulata"}, {"taxon": "무척추동물", "grade": "II", "name": "물거미", "sci": "Argyroneta aquatica"}, {"taxon": "무척추동물", "grade": "II", "name": "밤수지맨드라미", "sci": "Dendronephthya castanea"}, {"taxon": "무척추동물", "grade": "II", "name": "별혹산호", "sci": "Ellisella ceratophyta"}, {"taxon": "무척추동물", "grade": "II", "name": "붉은발말똥게", "sci": "Sesarmops intermedius"}, {"taxon": "무척추동물", "grade": "II", "name": "선침거미불가사리", "sci": "Ophiacantha linea"}, {"taxon": "무척추동물", "grade": "II", "name": "연수지맨드라미", "sci": "Dendronephthya mollis"}, {"taxon": "무척추동물", "grade": "II", "name": "염주알다슬기", "sci": "Koreanomelania nodifila"}, {"taxon": "무척추동물", "grade": "II", "name": "울릉도달팽이", "sci": "Karaftohelix adamsi"}, {"taxon": "무척추동물", "grade": "II", "name": "유착나무돌산호", "sci": "Dendrophyllia cribrosa"}, {"taxon": "무척추동물", "grade": "II", "name": "의염통성게", "sci": "Nacospatangus alta"}, {"taxon": "무척추동물", "grade": "II", "name": "자색수지맨드라미", "sci": "Dendronephthya putteri"}, {"taxon": "무척추동물", "grade": "II", "name": "잔가지나무돌산호", "sci": "Dendrophyllia ijimai"}, {"taxon": "무척추동물", "grade": "II", "name": "착생깃산호", "sci": "Plumarella adhaerans"}, {"taxon": "무척추동물", "grade": "II", "name": "참달팽이", "sci": "Koreanohadra koreana"}, {"taxon": "무척추동물", "grade": "II", "name": "측맵시산호", "sci": "Echinogorgia complexa"}, {"taxon": "무척추동물", "grade": "II", "name": "칼세오리옆새우", "sci": "Gammarus zeongogensis"}, {"taxon": "무척추동물", "grade": "II", "name": "해송", "sci": "Myriopathes japonica"}, {"taxon": "무척추동물", "grade": "II", "name": "흰발농게", "sci": "Austruca lactea"}, {"taxon": "무척추동물", "grade": "II", "name": "흰수지맨드라미", "sci": "Dendronephthya alba"}, {"taxon": "식물", "grade": "I", "name": "광릉요강꽃", "sci": "Cypripedium japonicum"}, {"taxon": "식물", "grade": "I", "name": "금자란", "sci": "Gastrochilus fuscopunctatus"}, {"taxon": "식물", "grade": "I", "name": "나도풍란", "sci": "Sedirea japonica"}, {"taxon": "식물", "grade": "I", "name": "만년콩", "sci": "Euchresta japonica"}, {"taxon": "식물", "grade": "I", "name": "비자란", "sci": "Thrixspermum japonicum"}, {"taxon": "식물", "grade": "I", "name": "암매", "sci": "Diapensia lapponica var. obovata"}, {"taxon": "식물", "grade": "I", "name": "제주고사리삼", "sci": "Mankyua chejuense"}, {"taxon": "식물", "grade": "I", "name": "죽백란", "sci": "Cymbidium lancifolium"}, {"taxon": "식물", "grade": "I", "name": "탐라란", "sci": "Gastrochilus japonicus"}, {"taxon": "식물", "grade": "I", "name": "털복주머니란", "sci": "Cypripedium guttatum"}, {"taxon": "식물", "grade": "I", "name": "풍란", "sci": "Neofinetia falcata"}, {"taxon": "식물", "grade": "I", "name": "한라솜다리", "sci": "Leontopodium coreanum var. hallaisanense"}, {"taxon": "식물", "grade": "I", "name": "한란", "sci": "Cymbidium kanran"}, {"taxon": "식물", "grade": "II", "name": "가는동자꽃", "sci": "Lychnis kiusiana"}, {"taxon": "식물", "grade": "II", "name": "가시연", "sci": "Euryale ferox"}, {"taxon": "식물", "grade": "II", "name": "가시오갈피나무", "sci": "Eleutherococcus senticosus"}, {"taxon": "식물", "grade": "II", "name": "각시수련", "sci": "Nymphaea tetragona var. minima"}, {"taxon": "식물", "grade": "II", "name": "개가시나무", "sci": "Quercus gilva"}, {"taxon": "식물", "grade": "II", "name": "갯봄맞이꽃", "sci": "Glaux maritima var. obtusifolia"}, {"taxon": "식물", "grade": "II", "name": "검은별고사리", "sci": "Cyclosorus interruptus"}, {"taxon": "식물", "grade": "II", "name": "구름병아리난초", "sci": "Neottianthe cucullata"}, {"taxon": "식물", "grade": "II", "name": "기생꽃", "sci": "Trientalis europaea subsp. arctica"}, {"taxon": "식물", "grade": "II", "name": "끈끈이귀개", "sci": "Drosera peltata var. nipponica"}, {"taxon": "식물", "grade": "II", "name": "나도범의귀", "sci": "Mitella nuda"}, {"taxon": "식물", "grade": "II", "name": "나도승마", "sci": "Kirengeshoma koreana"}, {"taxon": "식물", "grade": "II", "name": "나도여로", "sci": "Zigadenus sibiricus"}, {"taxon": "식물", "grade": "II", "name": "날개하늘나리", "sci": "Lilium dauricum"}, {"taxon": "식물", "grade": "II", "name": "넓은잎제비꽃", "sci": "Viola mirabilis"}, {"taxon": "식물", "grade": "II", "name": "노랑만병초", "sci": "Rhododendron aureum"}, {"taxon": "식물", "grade": "II", "name": "노랑붓꽃", "sci": "Iris koreana"}, {"taxon": "식물", "grade": "II", "name": "눈썹고사리", "sci": "Asplenium wrightii"}, {"taxon": "식물", "grade": "II", "name": "단양쑥부쟁이", "sci": "Aster altaicus var. uchiyamae"}, {"taxon": "식물", "grade": "II", "name": "대성쓴풀", "sci": "Anagallidium dichotomum"}, {"taxon": "식물", "grade": "II", "name": "대청부채", "sci": "Iris dichotoma"}, {"taxon": "식물", "grade": "II", "name": "대흥란", "sci": "Cymbidium macrorhizon"}, {"taxon": "식물", "grade": "II", "name": "독미나리", "sci": "Cicuta virosa"}, {"taxon": "식물", "grade": "II", "name": "두잎약난초", "sci": "Cremastra unguiculata"}, {"taxon": "식물", "grade": "II", "name": "매화마름", "sci": "Ranunculus trichophyllus var. kadzusensis"}, {"taxon": "식물", "grade": "II", "name": "무주나무", "sci": "Lasianthus japonicus"}, {"taxon": "식물", "grade": "II", "name": "물고사리", "sci": "Ceratopteris thalictroides"}, {"taxon": "식물", "grade": "II", "name": "물석송", "sci": "Lycopodiella cernua"}, {"taxon": "식물", "grade": "II", "name": "방울난초", "sci": "Habenaria flagellifera"}, {"taxon": "식물", "grade": "II", "name": "백부자", "sci": "Aconitum coreanum"}, {"taxon": "식물", "grade": "II", "name": "백양더부살이", "sci": "Orobanche filicicola"}, {"taxon": "식물", "grade": "II", "name": "백운란", "sci": "Kuhlhasseltia nakaiana"}, {"taxon": "식물", "grade": "II", "name": "복주머니란", "sci": "Cypripedium macranthos"}, {"taxon": "식물", "grade": "II", "name": "분홍장구채", "sci": "Silene capitata"}, {"taxon": "식물", "grade": "II", "name": "산분꽃나무", "sci": "Viburnum burejaeticum"}, {"taxon": "식물", "grade": "II", "name": "산작약", "sci": "Paeonia obovata"}, {"taxon": "식물", "grade": "II", "name": "삼백초", "sci": "Saururus chinensis"}, {"taxon": "식물", "grade": "II", "name": "새깃아재비", "sci": "Woodwardia japonica"}, {"taxon": "식물", "grade": "II", "name": "서울개발나물", "sci": "Pterygopleurum neurophyllum"}, {"taxon": "식물", "grade": "II", "name": "석곡", "sci": "Dendrobium moniliforme"}, {"taxon": "식물", "grade": "II", "name": "선모시대", "sci": "Adenophora erecta"}, {"taxon": "식물", "grade": "II", "name": "선제비꽃", "sci": "Viola raddeana"}, {"taxon": "식물", "grade": "II", "name": "섬개야광나무", "sci": "Cotoneaster wilsonii"}, {"taxon": "식물", "grade": "II", "name": "섬시호", "sci": "Bupleurum latissimum"}, {"taxon": "식물", "grade": "II", "name": "섬현삼", "sci": "Scrophularia takesimensis"}, {"taxon": "식물", "grade": "II", "name": "세뿔투구꽃", "sci": "Aconitum austrokoreense"}, {"taxon": "식물", "grade": "II", "name": "손바닥난초", "sci": "Gymnadenia conopsea"}, {"taxon": "식물", "grade": "II", "name": "솔잎난", "sci": "Psilotum nudum"}, {"taxon": "식물", "grade": "II", "name": "순채", "sci": "Brasenia schreberi"}, {"taxon": "식물", "grade": "II", "name": "신안새우난초", "sci": "Calanthe aristulifera"}, {"taxon": "식물", "grade": "II", "name": "애기송이풀", "sci": "Pedicularis ishidoyana"}, {"taxon": "식물", "grade": "II", "name": "연잎꿩의다리", "sci": "Thalictrum coreanum"}, {"taxon": "식물", "grade": "II", "name": "왕제비꽃", "sci": "Viola websteri"}, {"taxon": "식물", "grade": "II", "name": "으름난초", "sci": "Cyrtosia septentrionalis"}, {"taxon": "식물", "grade": "II", "name": "자주땅귀개", "sci": "Utricularia yakusimensis"}, {"taxon": "식물", "grade": "II", "name": "장백제비꽃", "sci": "Viola biflora"}, {"taxon": "식물", "grade": "II", "name": "전주물꼬리풀", "sci": "Dysophylla yatabeana"}, {"taxon": "식물", "grade": "II", "name": "정향풀", "sci": "Amsonia elliptica"}, {"taxon": "식물", "grade": "II", "name": "제비동자꽃", "sci": "Lychnis wilfordii"}, {"taxon": "식물", "grade": "II", "name": "제비붓꽃", "sci": "Iris laevigata"}, {"taxon": "식물", "grade": "II", "name": "조름나물", "sci": "Menyanthes trifoliata"}, {"taxon": "식물", "grade": "II", "name": "죽절초", "sci": "Sarcandra glabra"}, {"taxon": "식물", "grade": "II", "name": "지네발란", "sci": "Cleisostoma scolopendrifolium"}, {"taxon": "식물", "grade": "II", "name": "진노랑상사화", "sci": "Lycoris chinensis var. sinuolata"}, {"taxon": "식물", "grade": "II", "name": "차걸이란", "sci": "Oberonia japonica"}, {"taxon": "식물", "grade": "II", "name": "참닻꽃", "sci": "Halenia coreana"}, {"taxon": "식물", "grade": "II", "name": "참물부추", "sci": "Isoetes coreana"}, {"taxon": "식물", "grade": "II", "name": "초령목", "sci": "Michelia compressa"}, {"taxon": "식물", "grade": "II", "name": "칠보치마", "sci": "Metanarthecium luteo-viride"}, {"taxon": "식물", "grade": "II", "name": "콩짜개란", "sci": "Bulbophyllum drymoglossum"}, {"taxon": "식물", "grade": "II", "name": "큰바늘꽃", "sci": "Epilobium hirsutum"}, {"taxon": "식물", "grade": "II", "name": "파초일엽", "sci": "Asplenium antiquum"}, {"taxon": "식물", "grade": "II", "name": "피뿌리풀", "sci": "Stellera chamaejasme"}, {"taxon": "식물", "grade": "II", "name": "한라송이풀", "sci": "Pedicularis hallaisanensis"}, {"taxon": "식물", "grade": "II", "name": "한라옥잠난초", "sci": "Liparis auriculata"}, {"taxon": "식물", "grade": "II", "name": "한라장구채", "sci": "Silene fasciculata"}, {"taxon": "식물", "grade": "II", "name": "해오라비난초", "sci": "Habenaria radiata"}, {"taxon": "식물", "grade": "II", "name": "혹난초", "sci": "Bulbophyllum inconspicuum"}, {"taxon": "식물", "grade": "II", "name": "홍월귤", "sci": "Arctous rubra"}, {"taxon": "해조류", "grade": "II", "name": "그물공말", "sci": "Dictyosphaeria cavernosa"}, {"taxon": "해조류", "grade": "II", "name": "삼나무말", "sci": "Coccophora langsdorfii"}, {"taxon": "고등균류", "grade": "II", "name": "화경솔밭버섯", "sci": "Omphalotus guepiniiformis"}];
+const MAP = {"width": 640, "height": 1016, "provinces": [{"name": "강원도(북한)", "short": "강원(북)", "paths": ["M344.3,455.9L337.8,459.9L337.3,461.2L338.1,466.3L337.8,469.9L335.2,475.7L329.2,482.7L324.2,485.9L318.8,487.9L313.4,488.3L305.2,487.8L300.0,488.9L298.9,488.6L296.3,485.8L281.2,487.1L274.2,488.7L266.7,486.4L249.5,487.6L244.2,489.7L239.2,492.8L234.9,496.4L233.5,498.2L232.4,500.8L231.0,498.3L228.5,497.5L227.2,495.6L226.9,494.3L227.8,491.4L226.7,488.9L228.0,484.8L227.2,484.4L225.6,485.5L224.5,485.4L220.5,482.8L219.9,480.8L214.1,470.4L213.6,467.0L214.4,461.4L211.8,456.6L212.2,455.1L213.1,454.3L218.2,452.6L221.4,449.8L226.6,440.6L227.3,436.8L227.1,431.2L227.8,429.5L229.7,428.0L234.9,427.3L237.8,423.6L238.6,420.2L236.0,415.2L235.7,411.5L236.6,407.3L238.2,405.1L241.4,403.3L242.1,402.4L241.6,400.9L239.1,398.0L240.2,396.5L239.4,392.6L240.0,391.3L243.0,390.3L244.2,388.9L245.4,381.0L246.1,379.4L249.1,377.2L252.6,377.7L256.5,377.1L263.0,377.9L269.9,377.4L271.5,377.9L270.5,379.2L266.8,380.6L266.8,381.3L270.5,382.7L272.8,381.7L273.8,382.1L274.3,383.7L273.8,384.4L270.5,385.4L269.2,384.1L267.9,384.3L268.4,386.1L266.3,394.4L268.0,398.3L272.6,401.8L274.2,401.6L274.3,399.1L275.7,398.9L277.3,402.8L278.9,403.8L284.8,403.2L286.7,403.8L289.1,406.3L290.2,406.6L296.8,406.7L301.8,414.1L304.0,418.3L306.7,421.0L306.9,422.3L307.3,422.6L308.5,421.7L308.9,422.0L309.9,424.9L312.7,426.6L316.8,432.6L322.8,434.0L332.2,445.6L337.9,442.8L340.3,446.6L343.0,448.7L343.9,450.5L344.3,455.9Z"], "lx": 280.3, "ly": 433.4, "north": true}, {"name": "황해북도", "short": "황북", "paths": ["M232.4,500.8L230.8,504.8L225.1,510.0L218.4,520.3L215.3,522.8L210.8,524.5L210.4,526.8L211.0,535.4L209.7,538.3L205.1,540.8L203.8,540.4L192.8,533.4L190.1,529.3L190.8,527.5L189.4,525.4L189.2,524.4L190.1,519.5L189.2,516.0L189.8,514.3L188.9,512.2L189.2,509.6L188.0,507.1L188.7,505.3L190.8,503.5L192.6,506.3L193.1,504.5L191.1,500.3L189.5,498.4L180.9,494.4L178.2,494.2L174.3,495.2L170.9,497.8L167.9,497.7L165.6,499.7L161.5,499.3L156.2,501.3L153.5,501.0L152.2,499.7L151.0,494.3L147.8,491.1L145.4,486.6L138.4,487.2L138.8,485.1L135.3,482.3L136.9,479.8L135.0,476.7L135.0,471.1L132.2,465.2L132.2,461.9L130.8,455.5L131.6,455.2L129.5,452.4L128.5,449.5L128.2,446.2L125.6,443.0L125.1,440.3L127.5,439.5L135.7,434.5L142.9,434.5L152.1,438.9L153.3,440.2L153.4,442.7L154.1,443.8L158.4,446.1L163.5,447.9L167.0,447.1L169.7,443.8L174.7,441.9L175.8,440.0L175.7,436.8L175.1,434.8L172.3,430.7L168.8,428.4L167.8,427.0L167.9,423.0L169.1,421.0L170.7,421.4L173.2,419.5L176.7,419.9L179.8,422.5L183.9,422.9L189.0,425.3L195.4,427.3L196.7,427.2L197.7,425.9L197.6,423.3L196.6,420.7L198.4,418.3L199.5,418.4L204.4,421.0L208.6,420.7L210.4,419.8L207.3,413.5L205.1,411.2L202.6,406.4L202.6,403.7L203.9,401.8L205.1,402.0L206.7,404.0L208.5,404.8L215.9,403.8L219.1,406.0L224.5,407.8L229.6,411.8L235.7,411.5L236.0,415.2L238.6,420.2L238.3,422.2L237.1,424.9L234.9,427.3L229.7,428.0L227.8,429.5L227.1,431.2L227.3,436.8L226.6,440.6L221.4,449.8L218.2,452.6L213.1,454.3L212.2,455.1L211.8,456.6L214.4,461.4L213.6,467.0L214.1,470.4L219.9,480.8L220.5,482.8L224.5,485.4L225.6,485.5L227.2,484.4L228.0,484.8L226.7,488.9L227.8,491.4L226.9,494.3L227.2,495.6L228.5,497.5L231.0,498.3L232.4,500.8Z"], "lx": 193.9, "ly": 463.3, "north": true}, {"name": "함경북도", "short": "함북", "paths": ["M466.6,18.0L468.2,18.7L470.6,21.6L472.5,22.8L476.5,22.8L482.3,20.8L483.3,21.7L483.1,23.1L481.6,26.1L480.6,26.9L483.8,28.3L491.6,28.8L493.0,32.3L491.8,40.8L491.9,44.6L493.4,48.1L497.7,52.2L498.3,53.9L503.7,58.3L506.4,59.0L506.7,62.8L508.3,64.0L508.0,68.6L506.8,73.7L503.5,75.2L497.6,76.8L493.4,77.2L493.1,79.9L494.9,81.8L494.3,85.7L490.0,90.8L487.9,95.4L488.9,102.9L488.5,108.8L486.5,109.0L485.4,110.4L485.9,111.2L485.3,111.6L482.2,109.9L480.1,109.9L478.5,111.0L478.1,113.7L476.9,113.8L476.3,115.3L475.5,119.3L474.9,119.6L474.0,117.4L473.0,117.8L472.9,119.8L471.4,120.6L473.0,122.6L471.7,123.3L470.8,124.7L470.0,129.0L469.2,129.6L466.0,127.7L464.7,128.4L463.6,133.1L463.7,136.4L462.6,139.7L461.4,140.7L461.2,142.3L460.5,143.0L459.2,141.0L458.1,141.1L455.1,142.9L452.5,150.4L450.4,151.3L448.5,153.8L446.8,161.2L445.2,163.9L446.1,166.2L445.5,169.4L446.0,172.3L450.4,176.8L452.1,176.6L453.8,179.5L454.7,180.2L456.8,180.2L457.6,181.2L456.0,186.3L454.8,187.2L453.9,189.5L450.8,202.0L450.2,206.5L451.5,210.2L450.8,213.1L451.5,220.8L453.2,223.5L454.3,224.3L453.6,224.8L453.1,227.0L453.4,227.7L451.9,229.6L452.2,231.5L450.5,235.2L449.7,235.1L449.1,234.1L446.3,234.8L439.2,234.7L437.8,235.8L437.5,237.7L436.0,238.0L434.9,239.1L431.7,239.3L427.8,240.5L421.9,244.1L420.0,246.9L418.1,251.3L416.8,250.3L415.5,247.9L412.6,248.1L411.3,249.0L410.5,251.1L409.8,254.9L407.9,258.3L407.8,261.8L406.9,262.2L401.3,261.5L399.1,259.4L399.1,254.9L393.3,249.3L392.3,247.6L391.8,242.5L388.3,237.1L387.8,235.6L387.9,234.0L389.5,231.2L387.9,227.9L387.7,226.3L390.3,221.7L390.7,217.2L388.2,209.9L389.3,207.2L387.2,201.9L386.8,199.0L389.1,194.9L389.4,193.3L389.0,191.8L385.9,188.6L382.5,183.2L381.3,180.1L380.8,176.8L381.6,173.5L386.0,169.7L387.5,167.1L387.4,164.3L386.2,161.4L384.3,159.0L382.2,157.7L377.0,156.7L376.6,155.5L378.7,152.2L376.7,146.7L377.2,138.2L376.6,137.3L373.3,137.8L371.1,127.0L372.1,126.6L375.3,127.4L379.0,122.4L383.9,118.9L385.1,115.8L386.7,116.2L389.5,115.3L391.4,110.0L396.3,108.7L399.2,105.3L399.3,103.5L401.2,104.6L402.5,104.7L403.6,104.0L410.8,96.9L410.7,95.4L408.9,95.3L408.4,94.6L408.6,93.5L410.8,92.2L411.2,89.8L412.1,89.1L409.5,87.8L409.5,87.1L412.0,87.1L412.8,86.5L413.3,85.0L412.2,83.9L412.1,83.0L412.8,81.5L418.1,80.0L419.0,76.7L419.9,76.3L420.8,77.5L421.9,76.9L420.8,75.1L421.0,74.4L422.8,74.4L423.5,75.7L424.6,76.1L428.3,74.8L432.6,78.7L434.9,79.8L435.6,81.6L436.3,82.0L437.8,81.2L438.5,78.5L440.4,77.8L440.9,76.7L440.7,74.1L447.0,75.1L449.5,74.7L451.5,71.4L452.1,60.4L454.2,58.3L454.2,57.7L452.9,57.4L452.5,56.1L453.2,54.7L455.3,54.3L454.9,52.8L456.1,51.3L456.0,50.5L453.8,48.6L454.0,44.4L456.3,39.7L457.0,35.3L460.8,26.2L461.2,22.8L462.0,22.1L465.5,21.4L464.2,20.7L463.4,19.4L466.6,18.0Z"], "lx": 421.7, "ly": 143.8, "north": true}, {"name": "라선특별시", "short": "라선", "paths": ["M512.2,57.9L513.4,59.0L514.5,65.9L518.0,74.4L519.0,75.7L522.2,77.5L523.5,78.8L524.4,80.6L524.9,86.9L527.8,89.4L527.4,90.0L521.2,91.7L519.7,92.6L519.5,89.1L517.5,87.4L515.3,87.1L512.9,85.3L510.6,84.9L509.4,85.4L509.7,86.7L508.7,87.7L507.4,88.0L505.7,86.5L504.8,86.5L504.7,88.2L503.0,89.8L503.1,91.8L504.7,92.8L504.3,94.7L502.5,93.1L501.7,93.3L501.1,94.5L501.9,95.7L501.0,96.0L500.4,97.3L499.1,97.5L498.8,99.7L496.9,100.6L497.6,97.0L497.0,95.3L495.9,95.2L490.8,100.7L488.7,101.5L487.9,95.4L490.0,90.8L494.3,85.7L494.9,81.8L493.1,79.9L493.4,77.2L497.6,76.8L503.5,75.2L506.8,73.7L508.0,68.6L508.3,64.0L509.6,63.5L509.8,62.0L508.6,60.4L510.8,58.0L512.2,57.9Z"], "lx": 496.4, "ly": 78.9, "north": true}, {"name": "량강도", "short": "양강", "paths": ["M372.3,114.1L379.9,114.5L385.1,115.8L383.9,118.9L379.0,122.4L376.0,126.8L374.2,127.4L372.1,126.6L371.1,127.0L373.3,137.8L376.6,137.3L377.2,138.2L376.7,146.7L378.7,152.2L376.6,155.5L377.0,156.7L382.2,157.7L384.3,159.0L386.2,161.4L387.4,164.3L387.5,167.1L386.0,169.7L381.6,173.5L380.8,176.8L381.3,180.1L382.5,183.2L385.9,188.6L389.0,191.8L389.4,193.3L389.1,194.9L386.8,199.0L387.2,201.9L389.3,207.2L388.2,209.9L386.0,207.4L383.1,205.7L374.8,202.0L369.7,202.4L365.2,201.5L364.3,208.6L363.4,209.6L358.8,211.6L355.6,216.9L353.3,218.0L345.1,218.0L343.8,219.5L345.8,227.9L344.6,233.0L343.4,241.7L341.2,246.1L340.4,251.1L334.6,256.8L331.5,261.4L329.5,263.4L327.2,263.7L325.0,262.7L322.0,260.0L320.8,259.7L313.5,261.9L311.6,263.9L310.0,268.4L308.9,269.7L301.8,275.2L296.7,278.1L294.4,278.2L293.9,277.2L293.9,272.6L294.7,270.2L296.7,267.7L296.4,262.9L297.7,260.6L293.3,260.0L291.7,259.0L289.5,251.3L285.9,248.4L282.7,242.9L281.5,237.7L277.9,235.9L277.8,234.6L279.5,232.5L284.3,228.8L285.6,226.5L285.4,223.9L283.1,219.7L287.7,218.6L289.2,216.7L290.1,208.2L289.1,205.8L286.2,204.5L280.9,203.4L278.9,204.2L277.6,207.1L276.8,210.8L275.9,212.0L274.4,212.5L267.9,211.6L267.4,204.2L266.7,202.4L265.0,201.2L260.5,202.0L258.7,203.2L255.9,207.4L254.3,208.4L246.7,207.1L240.7,203.0L239.7,201.0L238.9,197.0L237.2,194.9L237.7,192.6L237.1,191.1L234.5,189.0L233.6,187.0L232.7,181.9L230.5,177.4L231.8,175.6L231.5,174.0L229.9,173.7L225.0,175.2L223.6,174.0L222.5,171.4L222.5,168.6L223.4,167.5L228.1,167.3L230.1,164.0L233.9,161.6L234.6,159.2L233.7,154.8L234.2,149.4L237.1,143.6L239.7,145.7L240.5,145.6L243.1,150.7L240.9,151.0L241.0,153.5L241.7,154.5L245.3,156.2L244.7,157.6L250.1,159.3L251.2,160.3L247.8,161.9L245.3,165.1L247.2,165.6L247.7,166.6L249.4,165.7L251.2,167.1L253.4,164.2L256.3,166.0L259.2,165.7L259.9,166.9L258.2,168.3L261.1,169.3L264.1,169.7L266.9,168.9L268.9,170.3L270.7,170.5L274.3,168.9L278.4,170.4L279.8,169.7L279.9,171.9L281.0,173.0L284.0,173.7L287.3,175.8L289.2,174.1L291.3,174.9L298.7,175.1L300.8,174.4L303.8,175.6L305.1,175.0L306.4,172.7L311.3,171.7L313.6,173.7L315.8,171.7L316.6,172.8L316.9,177.4L319.6,176.7L319.4,178.9L320.7,179.9L322.6,179.9L323.8,178.8L325.0,179.4L323.8,180.9L327.1,181.1L330.3,178.3L338.3,164.3L339.5,160.5L337.9,158.3L337.8,156.5L336.8,154.5L335.4,152.8L333.3,151.9L328.2,147.6L327.0,143.4L323.3,136.6L322.8,134.7L320.2,133.9L318.8,130.9L317.4,120.9L318.4,119.5L320.0,119.0L323.6,119.0L336.2,115.6L344.2,116.2L347.7,118.0L351.3,117.8L354.0,119.1L355.1,119.3L358.4,118.1L360.0,118.8L362.6,116.2L369.3,116.3L371.4,115.9L372.3,114.1Z"], "lx": 327.5, "ly": 193.7, "north": true}, {"name": "자강도", "short": "자강", "paths": ["M231.6,138.7L232.4,139.5L232.4,141.7L232.9,142.2L235.6,142.5L237.1,143.6L234.2,149.4L233.7,152.5L234.6,160.1L233.9,161.6L230.1,164.0L228.1,167.3L223.4,167.5L222.5,168.6L222.3,169.8L223.0,173.0L225.0,175.2L229.9,173.7L231.5,174.0L231.8,175.6L230.5,177.4L232.7,181.9L233.6,187.0L234.5,189.0L237.1,191.1L237.7,192.6L237.2,194.9L238.9,197.0L239.7,201.0L240.7,203.0L242.2,204.2L246.7,207.1L253.2,208.5L255.9,207.4L258.7,203.2L260.5,202.0L265.0,201.2L266.7,202.4L267.8,206.8L267.5,215.3L266.4,217.7L262.5,221.9L261.2,224.5L260.6,228.1L261.0,231.6L262.7,233.8L265.7,235.2L266.6,236.4L266.7,238.4L265.7,240.9L263.9,242.3L260.5,243.3L254.4,246.9L252.7,249.1L251.6,255.0L250.1,257.3L244.2,258.6L236.5,263.8L235.5,265.5L235.9,272.0L231.1,278.5L230.3,281.9L230.2,285.1L228.2,289.1L223.5,293.7L221.4,298.5L217.1,299.8L213.6,303.3L209.9,304.7L204.9,308.2L203.4,309.7L202.5,313.5L201.5,315.0L197.6,315.8L192.0,319.4L190.2,319.1L183.8,315.4L173.3,313.4L168.8,310.1L165.4,305.9L160.2,301.2L156.7,297.0L153.5,296.4L150.4,294.7L148.1,295.0L145.3,296.3L143.4,296.2L131.6,288.4L129.1,286.1L128.2,284.8L129.4,282.7L129.4,281.6L125.7,277.8L125.2,276.2L126.5,270.6L128.1,267.2L126.7,262.3L125.9,261.2L122.5,261.2L118.8,257.0L112.6,253.4L112.9,252.0L115.6,251.3L116.1,248.5L117.6,246.8L122.9,246.1L124.0,240.8L124.9,240.2L126.0,240.5L127.9,242.5L132.5,242.5L133.6,241.8L130.6,237.6L133.6,233.9L135.5,232.6L138.6,231.9L139.7,230.1L144.5,231.7L149.5,228.9L150.8,228.8L153.5,231.0L155.7,229.6L159.1,228.8L159.7,227.8L159.3,227.3L157.0,227.3L157.9,225.9L160.8,225.2L162.1,224.2L163.7,221.8L164.5,219.0L166.7,217.8L166.5,216.5L169.4,213.0L168.3,211.2L170.1,209.5L180.1,203.5L182.9,198.0L186.6,193.8L188.4,189.7L193.2,183.9L195.7,182.1L197.9,182.2L196.8,184.3L199.6,183.6L199.6,181.0L197.9,175.3L201.1,169.9L202.4,165.4L203.9,162.6L204.2,161.3L203.0,158.6L203.1,157.4L205.8,154.6L207.1,152.2L211.1,152.1L215.7,148.7L212.5,146.4L211.9,145.2L213.3,144.7L215.7,145.1L220.5,149.2L222.1,145.8L226.5,144.1L228.2,140.3L231.6,138.7Z"], "lx": 201.7, "ly": 243.7, "north": true}, {"name": "평안북도", "short": "평북", "paths": ["M112.4,255.5L112.6,253.4L118.8,257.0L122.5,261.2L126.4,261.6L128.1,267.2L126.5,270.6L125.2,276.2L125.7,277.8L129.4,281.6L129.4,282.7L128.2,284.8L129.1,286.1L131.6,288.4L143.4,296.2L145.3,296.3L148.1,295.0L150.4,294.7L153.5,296.4L156.7,297.0L169.9,311.2L175.0,314.1L182.3,315.0L186.8,316.8L185.7,318.6L185.2,321.7L187.5,326.2L187.6,328.0L187.0,329.2L178.9,333.3L166.4,336.5L164.1,336.0L160.7,332.8L159.7,332.7L158.6,335.3L156.9,336.3L154.4,339.7L150.9,343.0L147.7,343.8L146.5,346.5L143.9,349.8L140.2,352.4L134.0,355.2L130.3,354.9L124.1,358.8L119.6,360.6L115.5,361.4L114.9,360.0L102.4,366.4L98.6,362.2L96.5,361.2L97.7,359.4L92.3,359.4L93.4,362.1L89.2,361.9L87.6,358.2L83.7,358.1L80.8,355.0L78.9,354.6L76.7,352.3L75.8,352.2L75.1,353.9L73.1,352.9L72.2,352.3L71.5,349.3L69.5,347.1L64.5,345.5L64.2,344.5L61.1,343.7L60.8,341.5L60.0,340.2L59.5,342.3L60.7,345.1L59.9,349.4L60.9,349.7L60.6,351.3L58.7,352.0L59.8,354.1L57.7,353.8L56.0,354.7L52.4,357.3L51.5,359.4L50.4,358.7L50.8,357.3L50.0,357.0L49.4,355.6L50.8,354.0L51.1,352.2L52.1,351.6L52.2,348.7L50.4,349.1L49.3,347.0L47.3,346.2L47.7,341.9L45.5,339.9L45.7,337.1L35.5,335.5L34.2,336.1L33.1,334.4L32.6,332.0L29.9,331.4L28.3,328.5L26.7,327.3L27.5,326.0L30.5,324.5L31.5,318.3L33.3,315.8L38.0,317.0L40.6,316.3L39.1,315.5L33.6,314.9L32.2,313.7L30.5,308.7L42.9,297.2L44.5,296.5L45.0,294.4L46.2,293.3L51.9,289.2L57.4,287.6L59.6,281.6L64.3,279.2L68.2,275.5L71.8,270.3L73.5,272.5L74.9,273.1L83.2,272.5L83.6,271.5L81.2,267.8L81.2,266.4L81.9,265.2L85.7,263.8L94.2,259.3L100.1,257.1L101.7,254.3L103.0,253.8L106.4,254.5L108.5,254.0L110.7,255.4L112.4,255.5Z", "M74.2,358.0L72.9,359.1L74.7,363.4L70.8,365.7L69.1,367.7L65.7,368.9L67.2,366.4L68.2,366.8L68.7,365.7L67.6,364.6L68.7,364.1L68.5,361.1L69.8,360.4L69.7,358.9L70.7,358.1L70.6,357.2L72.0,357.1L74.2,358.0Z", "M55.4,365.8L56.8,364.8L57.0,365.4L56.8,367.6L56.2,368.2L54.8,367.7L55.4,365.8Z", "M55.4,364.0L53.4,364.6L52.1,363.7L48.2,364.7L48.3,364.0L51.0,362.0L54.3,361.4L55.7,361.5L56.2,362.2L55.4,364.0Z", "M48.2,375.4L48.0,373.8L49.5,372.8L50.0,375.2L48.2,375.4Z", "M18.3,337.8L18.8,336.6L19.5,336.4L20.5,338.1L18.9,339.4L18.0,339.0L18.3,337.8Z"], "lx": 83.9, "ly": 303.6, "north": true}, {"name": "평안남도", "short": "평남", "paths": ["M129.5,452.4L126.2,451.7L121.4,446.3L117.6,445.6L115.1,440.6L114.4,440.8L113.3,442.8L112.2,442.8L114.1,444.7L112.9,445.4L110.5,446.6L109.3,446.3L108.5,444.9L108.0,444.9L107.5,446.2L106.8,446.6L104.7,446.3L103.6,444.9L103.2,445.5L104.2,447.6L101.8,448.0L100.6,447.6L99.1,445.5L100.9,442.8L99.9,442.1L100.2,441.2L98.9,439.1L97.7,438.8L98.1,441.2L97.0,444.4L94.7,444.5L93.5,442.0L91.4,440.7L90.7,438.0L91.6,434.7L91.9,429.2L93.6,424.5L95.7,420.9L95.6,419.8L101.2,410.3L106.3,410.1L102.3,409.5L102.8,408.0L102.5,405.2L103.1,403.7L102.5,403.2L104.1,401.9L107.0,401.5L105.8,399.1L107.0,397.1L108.6,396.3L112.2,397.0L110.9,393.9L113.9,388.4L114.9,387.4L112.7,386.4L112.3,385.1L112.8,383.4L111.8,382.0L113.3,382.7L115.0,381.8L116.0,379.9L108.0,378.6L108.2,377.1L110.1,374.4L106.9,375.1L107.2,372.5L111.2,368.3L112.5,364.6L114.7,363.7L115.3,362.7L115.4,361.2L119.6,360.6L124.1,358.8L130.3,354.9L134.0,355.2L140.2,352.4L143.9,349.8L146.5,346.5L147.7,343.8L150.9,343.0L154.4,339.7L156.9,336.3L158.6,335.3L159.7,332.7L160.7,332.8L164.1,336.0L166.4,336.5L178.9,333.3L187.0,329.2L187.6,328.0L187.5,326.2L185.2,321.7L185.7,318.6L186.8,316.8L190.2,319.1L192.0,319.4L197.6,315.8L201.5,315.0L202.5,313.5L203.4,309.7L204.9,308.2L209.9,304.7L213.6,303.3L217.1,299.8L221.4,298.5L223.1,294.3L228.2,289.1L230.1,285.1L237.3,284.9L239.8,285.6L245.3,290.1L246.0,291.7L245.1,294.6L245.8,298.9L246.2,299.9L250.7,303.1L251.1,304.4L249.8,307.0L244.1,311.6L243.6,312.6L243.8,315.0L241.7,316.6L242.8,322.9L245.9,328.9L245.7,331.2L244.1,333.5L239.9,334.1L237.8,335.9L236.6,335.4L234.7,332.9L232.0,332.0L227.0,332.0L222.6,333.0L220.0,334.5L217.8,340.3L215.2,344.8L215.3,346.2L217.3,346.9L217.7,348.3L213.9,353.0L214.6,358.5L212.2,361.9L211.4,364.7L211.9,366.6L215.7,370.3L216.5,372.0L213.6,383.0L213.3,385.9L214.2,387.5L216.5,388.7L220.5,387.1L222.8,387.2L224.1,388.4L225.4,391.4L227.6,390.0L229.9,390.0L230.9,390.7L231.6,392.4L231.1,395.8L231.6,396.9L232.7,397.3L236.6,396.9L239.1,398.0L241.6,400.9L241.9,402.9L238.2,405.1L236.6,407.3L235.7,411.5L231.3,412.1L229.6,411.8L223.3,407.1L219.1,406.0L215.9,403.8L208.5,404.8L206.7,404.0L205.1,402.0L203.9,401.8L202.6,403.7L202.6,406.4L205.1,411.2L207.3,413.5L210.4,419.8L208.6,420.7L204.4,421.0L199.5,418.4L198.4,418.3L196.6,420.7L197.8,424.2L197.5,426.3L196.7,427.2L194.5,427.2L189.0,425.3L188.6,420.2L185.6,413.9L184.5,413.0L181.1,412.4L178.7,410.1L177.5,408.0L177.5,404.8L176.6,402.7L172.4,402.8L169.4,400.1L165.8,400.0L164.0,396.2L162.1,395.1L160.4,397.0L156.4,398.0L153.6,395.3L150.4,395.5L148.6,397.9L148.7,402.0L147.6,402.3L145.6,396.9L141.9,395.4L140.3,392.9L137.9,390.8L136.0,390.3L132.8,392.6L129.5,393.7L128.7,394.7L128.6,395.7L130.3,400.1L129.8,403.7L132.3,406.1L125.3,412.2L125.5,418.5L126.9,421.7L127.4,424.5L125.4,430.6L121.7,432.3L121.0,433.8L121.4,436.1L124.6,438.5L125.6,443.0L128.2,446.2L128.5,449.5L129.5,452.4Z"], "lx": 170.3, "ly": 373.5, "north": true}, {"name": "황해남도", "short": "황남", "paths": ["M190.1,529.3L186.7,529.8L178.9,533.7L172.6,534.2L170.1,536.3L171.5,541.4L171.0,544.8L167.2,544.1L165.4,538.2L163.5,538.0L162.9,531.2L160.6,532.8L159.5,532.8L158.6,529.7L155.3,527.0L154.1,528.0L154.6,529.3L156.4,530.8L157.4,535.9L155.1,534.2L152.4,533.7L150.3,531.7L145.6,523.9L143.2,523.1L143.1,519.3L142.8,518.9L138.6,517.5L134.0,517.0L130.8,515.5L126.9,515.0L125.5,515.7L125.4,517.3L126.8,519.0L130.3,520.9L133.0,520.5L133.8,521.0L133.3,523.0L134.9,522.4L136.5,523.0L134.9,525.7L137.5,525.0L138.1,525.7L136.2,527.4L133.8,528.4L132.5,528.3L129.5,525.7L129.3,528.0L130.3,532.6L128.9,534.5L130.6,535.9L129.7,537.3L127.8,537.6L128.7,541.7L127.3,542.0L125.8,541.4L125.2,540.8L125.8,540.0L124.8,539.5L123.3,539.9L123.1,541.1L121.5,540.9L120.9,540.2L121.4,538.6L119.5,540.3L117.3,545.1L114.4,546.2L110.2,546.6L108.4,550.2L107.3,550.6L106.3,549.6L107.4,544.4L108.5,542.1L110.6,542.7L114.9,540.8L113.7,540.0L111.0,540.6L109.6,540.0L110.6,538.6L112.3,537.3L115.8,535.9L119.7,536.9L121.1,536.4L121.4,533.9L119.0,534.2L117.6,532.5L119.9,529.8L120.0,528.8L116.4,527.8L115.0,526.2L113.3,527.0L113.9,528.4L110.1,529.0L113.6,530.8L115.0,532.2L114.9,533.9L111.4,531.7L109.2,531.3L107.4,531.8L108.3,533.1L109.6,533.9L105.6,536.9L104.2,537.3L103.6,535.9L98.8,535.9L99.7,534.4L103.1,532.2L104.2,530.4L103.6,528.7L100.2,526.8L100.4,525.0L98.8,525.3L96.3,530.1L93.8,531.5L87.8,530.7L84.8,528.6L81.0,527.6L80.5,526.4L81.0,524.3L78.4,525.7L79.4,522.9L82.8,521.9L84.8,520.4L85.9,520.2L90.5,522.2L93.7,521.2L94.5,520.2L93.9,519.4L92.2,520.2L89.0,518.0L88.3,514.8L89.1,514.1L95.8,513.3L96.7,513.7L97.7,516.1L99.3,516.2L99.9,512.9L101.5,512.0L100.8,510.5L99.5,509.9L94.9,509.7L91.0,508.5L81.0,512.0L75.1,508.5L72.5,505.8L71.0,505.1L70.3,506.9L69.4,507.5L63.8,508.5L54.6,506.7L53.8,505.7L54.3,504.5L56.2,503.8L59.9,503.5L61.5,502.7L62.2,500.7L66.0,499.7L68.6,495.6L70.5,495.2L71.7,496.1L73.8,499.3L79.4,495.6L77.4,494.7L73.3,495.4L69.9,492.5L69.7,490.1L70.8,482.8L74.3,477.4L75.8,473.3L76.7,472.2L77.8,472.1L77.8,474.3L81.3,468.5L81.6,466.8L79.7,464.7L79.6,460.9L78.5,459.9L78.7,459.1L81.4,460.0L82.9,459.2L84.5,461.5L88.0,459.0L90.0,460.3L90.5,459.2L90.7,455.9L89.3,453.8L89.1,452.6L89.7,451.7L90.8,452.1L92.3,455.2L94.1,454.9L94.1,451.3L96.0,453.1L101.0,451.3L103.6,452.7L105.9,450.5L109.0,448.9L114.7,449.7L115.4,447.9L116.3,447.6L119.8,449.7L120.9,453.1L121.8,452.9L122.8,450.4L124.4,451.3L126.0,454.1L127.9,455.2L131.2,455.9L132.2,465.2L135.0,471.1L134.8,476.2L136.9,479.8L135.3,482.3L138.8,485.1L138.4,487.2L145.4,486.6L147.8,491.1L151.0,494.3L152.0,499.2L152.8,500.6L155.5,501.3L159.1,500.5L161.5,499.3L165.6,499.7L167.9,497.7L170.9,497.8L174.3,495.2L178.2,494.2L182.7,495.1L190.4,499.3L193.1,504.5L192.6,506.3L190.8,503.5L188.7,505.3L188.0,507.1L189.2,509.6L188.9,512.2L189.8,514.3L189.2,516.0L190.1,519.5L189.2,524.4L189.4,525.4L190.8,527.5L190.1,529.3Z", "M70.8,465.5L72.4,468.9L67.5,467.2L66.0,466.1L64.2,467.5L63.5,466.6L63.8,464.9L67.7,462.8L68.1,463.7L70.3,464.7L70.8,465.5Z", "M105.8,541.5L106.5,541.3L103.2,545.4L99.4,548.2L97.7,548.6L97.3,547.8L99.6,545.0L100.7,544.5L101.5,544.8L101.9,543.3L105.8,541.5Z", "M91.6,539.6L91.1,538.3L93.0,536.8L95.0,536.7L94.9,537.3L91.6,539.6Z", "M82.4,534.6L83.2,534.8L83.2,536.5L81.2,537.6L79.8,537.4L80.9,536.0L82.2,536.3L82.4,534.6Z"], "lx": 115.3, "ly": 488.3, "north": true}, {"name": "함경남도", "short": "함남", "paths": ["M406.9,262.2L406.1,264.0L400.3,271.4L396.6,271.2L392.3,272.6L383.3,281.4L380.9,281.9L379.6,283.1L375.7,284.0L374.7,285.1L372.4,284.7L369.7,285.5L368.3,287.5L367.3,287.5L367.2,286.6L365.7,287.3L364.3,288.9L364.1,291.5L367.3,292.9L368.1,294.6L367.9,298.5L365.1,300.6L361.9,299.9L358.3,301.9L357.1,304.2L355.8,305.0L353.4,305.1L349.8,308.2L348.0,308.9L344.3,308.9L342.2,311.9L341.4,315.7L339.4,315.2L337.7,312.0L336.4,310.9L334.2,311.8L333.6,312.9L334.1,315.6L330.9,315.6L327.9,316.9L326.6,315.8L316.2,314.0L315.5,316.5L312.8,318.1L311.0,321.1L310.2,321.4L308.3,320.2L307.1,322.4L306.6,328.3L305.8,329.3L298.5,330.0L299.7,331.0L299.5,332.0L297.0,333.2L294.2,332.8L291.8,333.7L290.5,336.9L289.2,337.8L288.1,336.4L286.1,335.4L284.8,337.5L282.4,338.9L280.3,342.4L278.0,343.8L276.5,347.8L277.3,353.5L280.5,354.8L281.9,356.7L282.2,359.0L279.3,363.3L278.0,367.4L281.3,384.1L281.3,386.8L280.7,387.8L278.9,387.9L278.1,386.8L278.0,385.5L279.7,381.3L277.0,377.5L276.0,375.1L275.0,374.8L271.5,377.9L269.9,377.4L263.0,377.9L256.5,377.1L248.0,377.7L245.7,380.1L243.8,389.6L239.6,391.8L240.2,396.5L239.1,398.0L236.6,396.9L232.7,397.3L231.6,396.9L231.1,395.8L231.6,392.4L230.9,390.7L229.9,390.0L227.6,390.0L225.4,391.4L224.1,388.4L222.8,387.2L220.5,387.1L216.5,388.7L214.8,388.0L213.5,386.4L213.6,383.0L216.5,372.0L215.7,370.3L211.9,366.6L211.4,364.7L212.2,361.9L214.6,358.5L213.9,353.0L217.7,348.3L217.3,346.9L215.7,346.5L215.0,345.6L217.8,340.3L219.5,335.2L221.5,333.4L227.0,332.0L232.0,332.0L234.3,332.6L237.3,335.9L239.9,334.1L244.6,333.1L245.9,330.6L245.9,328.9L242.8,322.9L241.7,316.6L243.8,315.0L243.6,312.6L244.1,311.6L249.8,307.0L251.1,305.0L250.7,303.1L246.2,299.9L245.1,294.6L245.9,292.3L245.7,290.7L241.6,286.5L237.3,284.9L230.2,285.1L230.3,281.9L231.1,278.5L235.9,272.0L235.5,265.5L236.5,263.8L243.1,259.2L250.1,257.3L251.6,255.0L252.7,249.1L254.4,246.9L260.5,243.3L263.9,242.3L265.7,240.9L266.7,238.4L266.6,236.4L265.7,235.2L262.7,233.8L261.0,231.6L260.6,228.1L261.2,224.5L262.5,221.9L266.4,217.7L267.5,215.3L267.9,211.6L274.4,212.5L275.9,212.0L276.8,210.8L277.6,207.1L278.9,204.2L280.9,203.4L286.2,204.5L289.1,205.8L290.1,208.2L289.5,215.3L288.5,217.8L287.7,218.6L283.1,219.7L285.4,223.9L285.6,226.5L284.3,228.8L279.5,232.5L277.8,234.6L277.9,235.9L281.5,237.7L282.7,242.9L285.9,248.4L289.5,251.3L291.7,259.0L293.3,260.0L297.7,260.6L296.4,262.9L296.7,267.7L294.7,270.2L293.9,272.6L293.9,277.2L294.4,278.2L296.7,278.1L301.8,275.2L308.9,269.7L310.0,268.4L311.6,263.9L313.5,261.9L320.8,259.7L322.0,260.0L325.0,262.7L327.2,263.7L329.5,263.4L331.5,261.4L334.6,256.8L340.4,251.1L341.2,246.1L343.4,241.7L344.6,233.0L345.8,227.9L343.8,219.5L345.1,218.0L353.3,218.0L355.6,216.9L358.8,211.6L363.4,209.6L364.3,208.6L365.2,201.5L369.7,202.4L374.8,202.0L383.1,205.7L386.0,207.4L388.2,209.9L390.1,214.6L390.7,219.9L390.3,221.7L387.7,226.3L387.9,227.9L389.5,231.2L387.9,234.0L387.8,235.6L388.3,237.1L391.8,242.5L392.3,247.6L393.3,249.3L399.1,254.9L399.1,259.4L400.0,260.8L402.7,261.9L406.9,262.2Z"], "lx": 296.0, "ly": 308.6, "north": true}, {"name": "평양직할시", "short": "평양", "paths": ["M136.7,390.1L140.3,392.9L141.9,395.4L145.6,396.9L147.6,402.3L148.7,402.0L148.6,397.9L150.4,395.5L153.6,395.3L156.4,398.0L160.4,397.0L162.1,395.1L164.0,396.2L165.8,400.0L169.4,400.1L172.4,402.8L176.6,402.7L177.5,404.8L177.5,408.0L178.7,410.1L181.1,412.4L184.5,413.0L185.6,413.9L188.6,420.2L189.0,425.3L184.4,423.1L179.8,422.5L176.7,419.9L173.2,419.5L170.7,421.4L169.1,421.0L167.9,423.0L167.8,427.0L168.8,428.4L172.3,430.7L175.1,434.8L175.7,436.8L175.8,440.0L174.7,441.9L170.4,443.3L167.6,446.8L166.4,447.4L163.5,447.9L161.5,447.4L154.1,443.8L153.4,442.7L153.4,440.7L152.5,439.3L142.9,434.5L135.7,434.5L127.5,439.5L125.1,440.3L124.6,438.5L121.4,436.1L121.0,433.8L121.7,432.3L125.4,430.6L127.4,424.5L126.9,421.7L125.5,418.5L125.3,412.2L132.3,406.1L129.8,403.7L130.3,399.7L128.6,394.9L129.5,393.7L132.8,392.6L136.7,390.1Z"], "lx": 141.2, "ly": 420.4, "north": true}, {"name": "서울특별시", "short": "서울", "paths": ["M238.8,548.2L238.3,548.0L237.8,549.7L236.5,550.3L236.5,551.6L235.5,552.6L235.9,554.5L234.5,555.1L233.7,552.9L233.0,552.5L230.2,553.8L229.3,557.1L229.2,559.2L227.7,559.3L227.4,560.4L225.6,560.8L221.6,557.7L221.2,558.2L221.4,559.4L218.6,562.6L221.3,564.4L222.0,563.8L223.1,564.1L223.6,565.3L222.9,568.2L222.4,568.5L223.0,569.1L222.9,570.5L224.9,570.8L225.1,570.0L226.8,568.7L229.5,574.7L231.5,573.2L232.4,574.6L233.9,574.2L236.9,571.4L238.2,572.7L239.5,571.6L239.8,571.7L239.9,574.2L241.3,575.3L242.6,575.1L245.3,571.9L246.3,571.9L247.5,571.3L247.5,570.7L248.7,570.4L249.8,568.1L248.1,567.3L248.5,566.2L249.9,563.7L251.5,563.5L250.9,560.1L245.3,562.5L245.0,560.6L246.4,557.7L246.2,556.3L245.3,556.0L245.9,554.1L244.5,553.7L244.6,549.3L243.5,548.6L242.1,548.7L241.2,549.5L240.9,548.8L239.6,549.0L239.4,548.3L238.8,548.2Z"], "lx": 235.5, "ly": 558.2, "north": false}, {"name": "부산광역시", "short": "부산", "paths": ["M380.8,808.8L379.4,809.5L379.4,810.0L381.1,810.0L381.1,810.6L378.1,811.8L378.5,813.0L379.5,813.8L379.6,815.8L380.6,816.6L380.3,818.3L381.5,818.1L381.7,817.0L381.3,816.7L382.5,813.6L382.2,812.1L381.1,812.0L381.3,809.1L380.8,808.8Z", "M380.1,808.1L381.5,809.4L385.1,809.8L386.2,805.8L386.8,806.0L386.0,809.9L387.3,809.9L387.3,809.1L388.7,808.5L389.0,810.4L390.2,807.1L390.8,807.1L390.3,809.6L390.9,812.5L391.7,813.5L392.6,812.9L392.5,812.1L393.0,811.8L393.6,813.2L394.3,812.9L393.7,809.4L394.6,809.6L395.1,812.5L396.0,811.6L395.6,810.4L396.2,810.1L396.3,808.2L397.2,808.1L398.2,806.5L398.1,805.7L400.0,805.6L399.5,807.0L401.3,807.4L402.1,808.7L403.1,807.5L404.0,807.9L404.4,806.0L403.0,804.2L403.5,803.7L403.3,802.9L404.8,802.3L404.5,801.7L406.3,802.6L407.6,801.9L408.2,802.3L409.7,801.4L409.9,799.9L411.8,799.3L412.3,797.4L411.7,796.6L413.0,795.7L413.5,793.4L414.1,793.3L414.1,791.9L412.8,792.0L412.8,791.3L414.1,790.7L414.8,786.3L416.3,785.2L417.7,786.0L418.0,784.4L416.2,783.7L416.6,782.7L416.4,781.3L414.9,779.3L411.4,779.9L410.0,779.0L409.4,779.6L409.8,781.2L408.2,782.6L404.5,781.2L404.1,781.5L404.7,782.8L403.1,786.8L400.1,788.7L398.8,788.3L398.0,790.1L395.6,790.3L393.8,794.4L392.1,795.1L389.5,795.1L388.0,796.2L387.4,795.5L384.7,796.8L384.0,797.6L384.9,799.5L384.5,800.7L384.9,801.8L384.0,801.9L384.2,801.4L383.1,801.0L381.9,802.0L378.0,802.1L379.7,804.5L381.1,804.8L381.9,806.5L381.8,807.2L380.1,808.1Z"], "lx": 398.9, "ly": 802.8, "north": false}, {"name": "대구광역시", "short": "대구", "paths": ["M357.3,749.6L357.7,748.5L357.1,746.6L359.9,744.3L361.3,744.0L362.0,744.7L362.4,744.2L363.9,744.2L363.6,745.4L364.4,747.6L366.4,747.1L367.8,745.8L369.3,745.7L370.0,744.8L370.3,742.3L369.3,738.9L372.0,737.2L371.3,735.2L372.6,733.9L372.7,732.1L373.7,732.8L375.4,731.3L375.4,727.2L373.6,725.1L374.1,723.5L373.7,722.2L374.3,720.6L373.1,719.4L373.4,718.6L372.8,717.7L370.3,716.3L364.3,717.3L363.0,719.3L359.4,720.7L359.1,721.8L357.4,719.9L357.0,720.4L357.7,722.1L357.7,724.1L357.3,725.5L355.7,726.9L355.3,729.0L352.4,727.9L352.2,727.0L352.8,726.5L353.1,724.5L351.3,723.6L351.2,724.3L349.3,725.0L347.7,727.8L347.0,727.9L345.8,732.6L351.0,733.2L353.5,734.9L353.6,735.8L352.6,737.3L348.7,737.0L345.8,741.9L346.4,743.0L349.6,745.3L349.8,747.2L349.1,748.0L348.1,748.3L343.9,747.0L343.3,747.5L344.1,750.3L347.1,753.3L347.2,754.6L345.0,757.0L345.7,757.2L348.9,755.3L349.6,755.5L350.7,754.0L355.4,753.9L355.7,750.4L357.3,749.6Z"], "lx": 361.2, "ly": 733.9, "north": false}, {"name": "인천광역시", "short": "인천", "paths": ["M167.0,590.9L166.4,590.9L166.6,591.5L165.6,594.2L165.6,595.3L167.3,595.8L167.7,596.5L167.3,596.9L169.9,596.6L169.8,595.9L171.5,595.1L169.6,594.4L169.3,593.5L168.4,593.0L168.0,593.4L167.0,590.9Z", "M196.4,593.7L196.2,592.6L197.9,592.4L197.4,590.8L197.6,590.5L196.9,589.8L195.4,589.5L194.2,589.8L193.6,591.0L192.6,590.7L192.5,594.8L194.1,595.0L194.5,595.6L196.4,593.7Z", "M198.0,565.1L197.6,565.6L197.4,567.4L195.9,568.2L191.5,568.4L188.0,570.9L186.9,570.8L186.5,571.8L187.4,572.5L187.4,574.0L189.6,573.5L191.1,574.7L191.6,576.0L193.4,576.0L196.6,573.7L198.3,571.6L202.9,570.2L204.3,569.0L202.8,566.7L198.8,564.8L198.0,565.1Z", "M215.4,558.8L213.1,556.1L209.9,554.4L209.4,555.4L208.6,555.5L207.7,557.9L206.4,557.7L203.7,559.3L204.6,561.5L206.2,562.7L205.4,563.3L206.0,568.6L208.8,567.7L208.8,568.6L205.7,570.0L205.3,571.1L206.0,571.6L206.6,570.4L206.8,571.5L207.8,572.0L207.6,572.4L205.3,571.7L205.9,572.5L205.1,573.2L205.2,574.3L206.3,574.0L206.8,574.3L206.6,575.2L208.4,575.2L206.3,575.5L205.8,576.5L206.4,576.5L206.5,579.4L206.9,580.2L209.9,582.5L209.0,583.4L204.3,582.7L204.3,583.4L208.9,583.9L209.0,583.4L210.7,583.1L213.1,579.9L214.9,580.0L215.6,579.5L217.6,577.0L217.7,575.9L219.0,575.4L218.9,573.8L219.7,573.0L219.7,571.0L218.9,571.0L216.9,569.5L216.8,567.3L217.1,566.7L218.1,566.6L218.7,562.7L220.9,560.0L218.8,559.3L217.9,560.1L217.0,558.9L215.4,558.8Z", "M209.8,582.8L210.6,583.0L209.8,582.8Z", "M135.7,550.3L133.2,550.3L133.9,553.0L136.3,550.7L135.7,550.3Z", "M184.4,543.6L183.5,543.0L181.2,543.9L181.1,546.9L179.8,547.3L183.6,550.0L184.4,551.2L184.0,552.2L185.1,553.6L187.7,551.8L188.3,549.9L187.4,548.8L185.5,548.4L183.5,546.8L183.6,545.2L184.4,543.6Z", "M61.9,540.4L59.3,541.1L58.7,542.3L60.5,541.1L61.7,541.2L61.9,540.4Z", "M179.5,536.7L177.4,536.5L176.1,537.7L175.9,539.7L174.7,540.9L174.8,541.4L176.8,543.1L178.0,541.6L181.5,541.7L183.3,540.8L184.5,539.3L184.3,537.6L181.6,537.8L179.5,536.7Z", "M193.0,535.7L192.1,535.1L191.2,535.9L189.4,535.9L188.6,537.7L186.1,539.0L186.4,547.5L189.3,548.7L189.0,549.2L190.2,550.6L190.8,553.0L189.5,554.2L187.6,554.5L188.2,556.2L188.0,557.0L190.4,558.8L194.4,558.8L196.1,558.3L196.2,557.6L198.9,558.8L198.1,559.1L199.2,560.1L199.8,559.6L199.0,558.2L199.4,557.1L201.3,556.2L200.6,556.0L199.6,552.8L200.3,551.6L199.3,551.1L199.2,550.3L199.8,548.0L198.8,546.6L198.9,545.7L199.9,543.5L198.7,542.0L198.4,540.0L193.9,537.0L193.0,535.7Z", "M57.7,535.7L57.9,534.5L58.6,534.3L57.9,533.7L55.8,534.3L54.7,536.1L55.2,537.1L56.6,537.7L57.8,536.8L57.7,535.7Z", "M55.4,520.2L54.1,520.1L51.6,521.4L49.9,520.5L49.5,522.1L50.6,522.8L51.4,525.6L54.9,525.9L55.7,526.6L56.4,526.2L57.0,523.8L58.8,522.8L58.7,522.2L60.0,522.3L59.0,521.7L58.7,520.4L58.1,520.1L55.4,520.2Z"], "lx": 193.9, "ly": 576.1, "north": false}, {"name": "대전광역시", "short": "대전", "paths": ["M268.4,669.1L267.0,668.0L266.0,669.2L265.4,669.1L265.7,670.5L265.3,672.4L264.2,673.6L263.9,674.9L262.7,675.8L260.4,675.7L259.3,676.5L259.2,680.5L258.4,681.9L259.0,683.5L258.0,684.2L258.0,685.1L257.5,685.2L257.5,688.3L256.5,688.9L257.4,690.4L260.0,691.6L259.1,692.7L259.3,694.1L260.2,695.6L261.2,695.3L261.9,695.9L262.6,697.6L263.3,697.9L263.2,699.5L265.7,696.1L265.4,691.7L265.6,691.1L266.8,690.8L267.8,691.7L267.5,694.5L268.5,694.7L269.4,696.3L269.2,696.7L272.0,698.5L272.9,697.8L272.8,697.3L273.9,696.5L273.8,695.7L275.8,694.2L275.3,691.8L276.3,689.7L275.7,688.0L276.3,687.4L276.0,686.8L276.6,685.5L276.5,684.0L277.9,682.9L278.8,678.9L279.5,678.2L281.1,678.2L279.5,675.9L278.3,675.6L277.5,675.7L277.2,677.0L276.5,677.1L275.6,674.7L276.7,673.1L276.4,672.4L275.0,672.6L274.6,672.2L275.2,670.5L274.0,670.6L273.4,672.4L272.6,673.1L271.3,672.4L268.7,672.4L268.9,670.3L268.4,669.1Z"], "lx": 268.5, "ly": 688.0, "north": false}, {"name": "울산광역시", "short": "울산", "paths": ["M406.8,746.3L405.3,745.5L404.8,746.7L402.2,747.3L400.3,748.6L399.7,749.6L399.6,752.0L400.6,753.5L397.9,752.8L397.0,754.7L395.9,754.4L394.4,755.8L396.0,756.5L395.7,759.5L392.0,761.8L392.1,762.2L392.7,763.2L393.4,762.7L394.1,763.7L393.9,765.1L395.8,765.4L398.6,764.6L398.4,766.4L402.6,768.3L402.8,769.9L403.8,771.5L406.7,774.2L407.4,774.7L409.7,773.9L410.1,775.7L411.4,777.1L410.0,779.0L411.4,779.9L414.9,779.3L416.4,781.3L416.6,782.7L416.2,783.7L418.8,784.8L420.4,782.4L421.4,782.6L422.7,781.8L422.2,780.6L421.4,780.3L421.5,778.9L422.7,777.2L422.8,775.3L423.4,774.3L422.4,773.6L422.5,773.0L421.7,773.0L421.5,771.4L420.7,770.5L423.2,772.4L422.8,771.8L423.6,771.6L424.4,770.2L424.8,769.1L424.0,767.9L424.7,767.7L424.5,766.2L423.7,766.1L423.8,764.1L425.4,766.7L425.3,767.7L426.3,768.5L426.0,770.1L426.4,770.7L426.9,769.8L427.9,769.3L428.2,769.8L428.8,769.1L428.7,768.5L428.1,768.3L429.0,767.7L429.0,767.1L428.2,767.3L428.3,766.7L429.2,766.7L429.3,765.6L428.7,765.0L429.9,765.0L430.3,762.5L429.9,759.8L430.7,759.2L430.6,757.4L428.9,754.6L429.5,752.7L425.7,751.2L423.5,750.9L422.0,749.9L420.5,750.9L420.0,752.0L418.7,751.8L417.2,753.4L414.3,751.8L414.9,748.8L414.4,747.8L412.6,747.5L410.4,745.8L409.7,746.3L408.5,745.5L408.3,746.2L406.8,746.3Z"], "lx": 413.9, "ly": 760.9, "north": false}, {"name": "세종특별자치시", "short": "세종", "paths": ["M250.6,645.0L249.6,644.8L247.2,647.2L247.8,647.5L248.4,649.1L249.7,649.2L250.0,650.2L249.3,651.6L249.7,652.4L249.3,652.7L249.5,654.5L248.9,656.2L249.3,657.3L252.1,658.6L252.3,659.9L253.4,660.2L251.8,662.7L252.1,663.3L250.8,663.8L251.4,665.9L250.5,667.1L251.1,667.8L250.7,668.3L251.0,668.7L252.4,669.0L252.1,670.1L253.2,672.1L252.7,672.8L252.9,674.1L256.1,676.1L256.8,677.3L258.0,676.3L258.8,676.6L260.0,676.4L260.4,675.7L262.7,675.8L263.9,674.9L264.2,673.6L265.3,672.4L265.7,670.5L265.4,669.1L267.3,668.0L268.2,668.8L269.3,668.5L269.2,667.0L268.3,665.9L269.2,665.6L268.9,664.3L267.3,663.9L266.8,661.2L263.6,661.7L262.4,659.6L260.7,659.2L261.2,657.8L260.0,655.5L260.0,654.4L259.0,654.6L258.8,654.0L259.8,652.1L261.1,651.3L261.0,649.5L258.6,648.5L256.4,648.4L255.7,647.3L253.1,645.4L250.6,645.0Z"], "lx": 258.3, "ly": 656.0, "north": false}, {"name": "경기도", "short": "경기", "paths": ["M216.9,614.3L217.5,615.1L221.0,615.5L221.2,616.7L219.7,617.3L220.5,618.6L222.1,618.5L221.7,619.1L222.1,619.2L222.3,618.6L223.2,619.0L223.0,619.5L225.3,623.4L226.3,623.2L226.7,624.7L228.2,624.4L229.2,625.1L230.0,627.9L236.7,624.5L239.7,625.2L243.9,623.3L244.6,623.8L245.2,622.8L244.7,622.1L245.2,621.6L246.1,620.9L247.2,621.4L248.4,621.0L253.0,622.9L253.7,625.1L256.3,626.3L257.0,625.8L258.4,626.7L259.7,628.7L260.9,626.4L260.3,625.1L262.8,624.5L264.9,622.8L265.2,623.3L266.6,623.1L267.5,621.6L268.4,621.6L268.6,621.3L267.3,619.7L268.1,618.2L270.8,617.9L272.2,616.9L273.2,615.6L273.1,613.7L273.9,613.1L275.3,612.6L276.1,613.3L277.1,613.1L277.7,612.3L280.9,614.0L281.8,613.3L281.6,611.9L282.5,610.6L284.5,611.2L284.2,609.5L285.8,609.1L287.0,607.7L287.2,604.0L286.7,602.7L287.9,603.0L289.8,604.5L291.7,604.1L292.5,601.4L293.4,599.8L294.2,599.9L295.0,597.1L295.9,596.3L295.8,594.1L296.8,590.8L296.0,588.9L297.4,587.8L297.5,587.2L296.7,585.0L296.8,581.4L298.3,581.1L298.1,579.8L298.7,579.3L299.6,575.6L300.3,575.3L299.7,571.8L300.0,571.2L298.0,569.0L296.8,568.9L296.8,567.8L298.0,567.5L300.7,564.4L303.3,564.3L303.7,562.9L301.1,561.8L299.5,559.6L298.7,560.4L296.3,559.0L292.8,559.5L289.1,555.7L288.4,555.9L287.9,554.9L284.4,553.0L283.1,554.0L282.7,554.8L281.0,555.3L279.4,554.0L279.2,553.1L280.5,552.0L280.4,549.4L281.2,546.2L280.8,545.3L279.5,546.2L278.3,545.5L277.4,546.4L276.9,545.8L276.9,545.1L279.7,542.7L279.9,541.8L278.1,539.3L279.3,537.2L278.4,535.9L278.4,534.9L281.6,532.3L282.5,530.8L284.5,530.8L285.0,529.9L285.6,527.6L285.2,525.8L285.5,525.4L284.4,522.7L280.1,521.6L279.6,518.2L276.7,518.4L273.5,517.1L272.0,512.5L272.2,510.2L271.7,507.4L269.0,508.0L268.6,506.9L266.8,506.4L265.9,507.6L263.8,508.2L263.6,509.2L262.3,508.8L261.6,506.7L259.6,506.8L258.8,505.8L258.8,504.3L259.6,503.0L259.8,501.3L260.5,500.6L259.3,500.0L257.9,500.5L257.2,502.0L255.9,502.6L255.5,503.5L254.9,503.4L254.5,504.5L252.0,502.1L252.0,499.4L251.3,499.7L250.4,498.5L250.9,497.7L250.5,496.9L249.7,496.4L249.9,494.4L248.8,494.0L247.4,495.0L246.0,494.6L245.7,491.1L245.1,490.9L245.2,490.2L243.0,490.5L243.1,491.0L242.3,491.9L240.4,492.4L240.0,493.3L238.2,494.6L237.8,495.7L235.7,495.5L235.8,497.2L235.1,498.3L234.5,498.4L234.4,501.1L233.1,502.3L234.6,503.5L234.5,504.4L231.2,505.4L229.6,504.5L228.4,505.4L228.0,506.5L226.3,507.4L225.9,508.6L226.8,510.2L226.6,511.5L225.5,512.9L225.7,514.2L223.1,516.7L223.2,517.4L222.3,518.3L220.6,518.3L220.1,520.0L218.4,519.8L216.4,521.6L215.1,521.7L213.7,520.8L211.3,523.4L210.9,526.3L212.2,526.9L211.3,529.3L212.1,530.3L211.4,531.2L212.2,530.8L212.9,531.4L211.9,533.6L210.4,534.3L211.3,535.3L210.6,540.1L208.2,540.1L205.2,542.1L203.7,541.9L199.6,539.2L199.2,541.1L199.7,541.4L199.3,541.9L200.2,543.2L199.5,546.8L200.4,548.8L199.9,550.8L201.3,551.9L200.3,552.7L201.8,555.5L202.1,557.2L203.5,558.3L203.9,557.7L205.0,558.3L205.0,558.9L206.4,557.7L207.7,557.9L208.6,555.5L209.4,555.4L209.9,554.4L213.1,556.1L215.5,559.0L217.0,558.9L217.4,560.0L218.8,559.3L220.9,560.0L221.4,559.4L221.2,558.2L221.6,557.7L225.6,560.8L227.4,560.4L227.7,559.3L229.2,559.2L229.3,557.1L230.2,553.8L233.0,552.5L233.7,552.9L234.5,555.1L235.9,554.5L235.5,552.6L236.5,551.6L236.5,550.3L237.8,549.7L238.3,548.0L239.4,548.3L239.6,549.0L240.9,548.8L241.2,549.5L242.1,548.7L243.5,548.6L244.6,549.3L244.5,553.7L245.9,554.1L245.3,556.0L246.2,556.3L246.4,557.7L245.0,560.6L245.3,562.5L250.9,560.1L251.4,562.1L251.5,563.5L249.9,563.7L248.1,567.3L249.8,568.1L248.7,570.4L247.5,570.7L247.5,571.3L246.3,571.9L245.3,571.9L242.6,575.1L241.3,575.3L239.9,574.2L239.8,571.7L238.2,572.7L237.3,571.4L235.1,572.7L233.9,574.2L232.4,574.6L231.5,573.2L229.5,574.7L226.8,568.7L225.1,570.0L224.9,570.8L222.9,570.5L223.0,569.1L222.4,568.5L222.9,568.2L223.6,565.3L223.1,564.1L222.0,563.8L221.3,564.4L218.7,562.7L218.3,566.2L217.1,566.7L216.8,568.7L216.9,569.5L218.9,571.0L219.7,571.0L219.7,573.0L218.9,573.8L219.0,575.4L217.7,575.9L217.5,578.1L216.6,578.6L213.6,582.7L213.8,583.0L212.6,583.3L212.4,584.0L212.8,584.2L212.5,584.7L206.5,586.8L202.9,590.3L201.6,590.1L202.8,592.6L202.6,593.9L203.2,594.5L201.3,594.8L201.1,595.7L202.3,596.3L201.3,596.6L201.4,597.5L202.7,598.8L203.8,596.2L206.7,596.9L205.7,595.3L207.2,595.1L207.7,596.2L209.3,597.0L209.0,598.3L209.3,599.0L210.0,595.6L208.6,593.0L209.0,591.2L208.6,590.9L207.6,591.7L203.9,588.8L206.8,586.8L211.3,585.2L212.0,586.2L218.8,588.9L222.7,588.3L221.8,588.8L222.1,591.5L220.7,591.4L220.6,593.7L218.1,593.2L217.9,592.7L216.2,593.2L213.4,592.0L212.2,592.4L211.3,590.8L212.3,590.0L209.2,590.3L209.8,590.9L209.3,592.3L209.5,593.9L210.3,595.2L210.4,596.4L209.6,599.6L211.0,599.3L209.9,602.7L212.1,602.1L212.8,602.4L213.1,602.9L211.6,604.3L212.3,606.9L218.0,612.5L216.9,614.3Z", "M218.0,612.5L212.4,606.9L212.9,606.0L213.9,605.8L213.6,605.4L214.0,604.9L215.6,604.2L217.5,601.3L219.6,601.6L220.8,600.5L221.2,601.9L220.3,602.6L220.7,603.1L221.7,602.9L222.7,603.7L221.5,604.3L221.0,605.2L220.0,604.6L218.3,606.3L218.1,607.0L219.1,607.9L218.5,610.6L218.5,611.8L219.0,612.1L218.0,612.5Z", "M225.8,591.1L225.0,592.1L224.8,591.6L225.8,591.1Z"], "lx": 260.7, "ly": 593.1, "north": false}, {"name": "강원도", "short": "강원", "paths": ["M372.7,515.9L369.4,512.4L368.7,510.2L363.5,503.2L363.3,500.9L363.9,500.3L362.3,498.2L362.3,499.1L361.5,499.1L362.6,496.7L359.7,492.5L358.6,487.7L357.2,486.2L357.2,485.0L356.0,483.6L355.5,482.2L355.8,481.0L351.7,475.4L351.4,473.8L352.4,473.3L350.3,470.7L348.6,467.1L348.6,466.0L347.5,463.9L348.0,462.8L347.5,462.8L347.2,461.9L343.4,457.1L340.0,459.4L340.4,460.9L340.3,467.1L339.3,469.2L339.8,470.5L337.9,474.7L335.0,476.9L335.0,477.7L333.7,478.6L332.4,481.3L330.7,481.0L330.1,482.2L329.4,481.9L328.1,484.0L325.7,485.1L324.8,484.6L321.1,487.3L319.5,487.6L317.1,486.9L316.8,489.5L316.2,490.5L314.6,490.9L312.4,488.3L309.9,487.3L307.4,487.0L306.9,487.4L305.8,486.6L301.7,487.9L299.7,486.0L298.8,483.6L297.8,484.6L296.1,484.9L294.8,484.4L293.3,485.3L292.3,484.7L291.4,485.7L289.8,486.0L285.8,485.8L285.0,484.6L282.5,484.7L276.2,488.3L273.1,485.7L272.6,485.6L272.8,486.5L272.0,486.6L270.7,485.6L267.1,484.6L265.5,485.9L264.4,485.4L262.9,486.5L260.6,487.0L259.7,485.7L256.0,485.0L249.3,487.9L248.0,486.7L247.5,486.9L247.1,488.3L245.8,488.7L244.6,490.1L245.2,490.2L245.1,490.9L245.7,491.1L246.0,494.6L247.4,495.0L248.8,494.0L249.9,494.4L249.7,496.4L250.5,496.9L250.9,497.7L250.4,498.5L251.3,499.7L252.0,499.4L252.0,502.1L254.5,504.5L254.9,503.4L255.5,503.5L255.9,502.6L257.2,502.0L257.9,500.5L259.3,500.0L260.5,500.6L259.8,501.3L259.6,503.0L258.8,504.3L258.8,505.8L259.6,506.8L261.6,506.7L262.3,508.8L263.6,509.2L263.8,508.2L265.9,507.6L266.8,506.4L268.6,506.9L269.0,508.0L271.7,507.4L272.2,510.2L272.0,512.5L272.6,513.4L273.0,516.5L274.2,517.6L276.7,518.4L279.6,518.2L280.1,521.6L284.4,522.7L284.5,523.8L285.2,524.2L285.6,527.6L284.5,530.8L282.5,530.8L281.6,532.3L278.4,534.9L278.4,535.9L279.3,537.2L278.1,539.3L279.9,541.8L279.7,542.7L276.9,545.1L276.9,545.8L277.4,546.4L278.3,545.5L279.5,546.2L280.8,545.3L281.2,546.2L280.4,549.4L280.5,552.0L279.2,553.1L280.2,554.9L281.0,555.3L282.7,554.8L283.1,554.0L284.4,553.0L287.9,554.9L288.4,555.9L289.1,555.7L292.8,559.5L296.3,559.0L298.7,560.4L299.5,559.6L301.1,561.8L303.7,562.9L303.3,564.3L300.7,564.4L298.0,567.5L296.8,567.8L296.8,568.9L298.0,569.0L300.0,571.2L299.7,571.8L300.3,575.3L299.6,575.6L298.7,579.3L298.1,579.8L298.3,581.1L296.8,581.4L296.7,585.0L297.5,587.2L297.4,587.8L296.0,588.9L296.8,590.8L295.8,594.1L295.6,597.4L296.5,601.0L299.1,603.8L304.8,602.6L304.8,602.0L305.6,601.7L307.9,602.9L308.5,601.4L309.7,601.7L310.7,599.2L309.5,595.6L313.3,592.6L314.5,592.3L317.2,593.7L317.5,595.6L318.7,596.5L317.9,597.8L318.6,599.2L323.8,597.8L324.4,597.3L325.5,594.7L328.6,596.8L329.3,596.2L329.3,594.9L332.0,593.2L333.6,595.3L335.3,595.1L336.8,597.3L340.3,595.8L341.8,596.7L341.4,598.3L340.3,598.4L340.1,599.4L338.9,599.8L339.1,600.9L337.8,600.8L336.6,602.5L339.1,604.7L342.0,602.4L343.3,602.4L344.0,603.0L344.3,602.5L345.4,602.8L345.8,602.3L347.2,603.4L347.4,604.1L346.8,605.2L348.5,606.1L348.9,607.6L350.1,607.0L353.2,607.1L354.7,605.5L356.1,607.7L357.6,608.3L357.8,609.1L359.8,609.1L360.8,610.0L362.6,609.9L363.3,610.4L364.6,609.4L365.0,610.6L369.8,612.8L370.7,614.0L373.4,614.1L374.4,615.1L375.5,614.5L374.8,612.7L375.1,611.4L375.8,611.7L377.0,608.9L378.5,609.4L378.5,610.2L379.1,610.5L380.8,610.2L381.0,611.4L382.2,612.9L384.5,613.6L384.7,612.8L386.2,613.4L386.2,612.5L387.2,611.5L388.2,608.9L390.0,608.7L391.0,610.3L393.0,609.6L397.1,610.5L398.9,611.6L399.8,609.3L401.7,608.1L406.9,611.2L408.8,613.9L412.5,613.7L412.2,612.4L412.5,611.7L411.9,610.7L413.8,608.5L415.1,607.9L415.5,606.5L417.4,606.7L419.8,603.9L422.8,603.5L421.5,600.4L421.2,598.1L421.5,596.9L421.0,596.0L421.2,595.2L422.3,594.5L420.0,591.8L420.1,590.1L417.8,588.8L417.7,587.1L417.0,587.2L415.5,586.0L415.2,583.8L413.9,581.8L414.2,580.3L409.8,576.6L408.9,572.4L405.4,568.7L404.0,569.1L404.9,568.5L404.5,568.0L404.9,567.8L403.3,564.6L403.0,563.2L403.8,562.6L403.3,560.3L398.5,556.0L397.7,554.3L398.7,552.3L398.6,550.6L395.6,547.8L393.4,544.2L385.0,535.5L384.6,534.1L380.9,529.8L381.2,528.3L377.6,524.7L375.6,521.6L375.4,520.3L373.1,517.5L373.5,516.2L372.7,515.9Z"], "lx": 339.2, "ly": 553.2, "north": false}, {"name": "충청북도", "short": "충북", "paths": ["M259.7,628.7L261.3,629.5L261.5,631.2L261.1,631.7L261.7,632.3L263.5,632.6L263.3,634.8L265.1,635.2L265.2,635.8L267.9,637.4L268.7,638.5L268.1,639.6L270.1,641.9L268.9,643.4L267.5,642.1L266.1,641.9L263.5,642.8L263.3,643.4L264.1,644.5L263.6,645.1L262.7,644.7L261.5,645.7L261.3,647.6L259.5,649.0L261.3,649.8L261.1,651.3L259.8,652.1L258.8,654.0L259.0,654.6L260.0,654.4L260.0,655.5L261.2,657.8L260.7,659.2L262.4,659.6L263.6,661.7L266.8,661.2L267.3,663.9L268.9,664.3L269.2,665.6L268.3,665.9L269.2,667.0L269.3,668.5L268.2,668.8L268.8,669.5L268.7,672.4L271.3,672.4L272.6,673.1L273.4,672.4L274.0,670.6L275.2,670.5L274.6,672.2L275.0,672.6L276.4,672.4L276.7,673.1L275.6,674.7L276.5,677.1L277.2,677.0L277.5,675.7L278.3,675.6L279.5,675.9L281.1,678.2L279.5,678.2L278.8,678.9L277.9,682.9L276.5,684.0L276.6,685.5L276.0,686.8L276.3,687.4L275.7,688.0L276.3,689.7L275.3,691.8L275.8,694.2L277.8,693.9L278.9,692.9L280.3,694.1L279.9,695.4L282.6,694.7L284.1,696.2L283.7,700.2L284.4,701.9L283.4,704.5L285.7,707.1L285.6,708.6L288.5,712.3L288.9,714.0L290.0,713.8L289.7,712.8L291.2,711.7L292.4,714.5L296.8,715.4L296.8,716.3L297.3,716.7L299.0,716.5L299.7,715.4L304.1,714.0L305.3,715.5L306.0,715.7L309.1,712.5L310.7,712.8L312.6,710.9L312.4,708.9L313.2,707.5L312.9,706.7L314.8,704.7L314.7,703.2L315.4,702.5L313.7,699.2L314.4,697.9L316.4,697.0L317.6,697.3L318.7,698.5L320.1,697.7L318.0,694.0L319.4,692.3L317.7,691.2L316.5,690.8L314.2,691.6L313.4,692.9L312.5,692.7L310.2,690.2L308.4,689.3L308.1,687.8L306.4,690.6L304.0,690.6L303.2,687.0L304.1,685.0L306.4,683.4L307.1,682.0L306.6,680.0L305.0,677.7L305.7,677.3L306.4,675.9L305.7,675.6L305.6,673.9L306.4,671.8L305.9,669.2L308.3,667.3L308.0,665.2L306.2,664.5L305.5,663.7L305.5,662.1L304.7,661.2L301.9,660.9L299.8,659.4L299.8,658.0L301.6,656.9L303.2,657.2L304.3,656.3L303.9,656.1L303.8,654.6L304.8,654.5L306.2,652.4L307.1,655.1L308.4,655.4L309.4,657.9L309.8,657.7L309.7,656.5L310.4,656.1L310.9,653.4L310.3,651.6L309.2,651.2L308.8,650.3L307.8,649.8L306.2,650.2L307.3,648.6L310.1,648.9L310.4,647.4L311.7,647.2L312.3,644.5L314.6,646.3L315.8,646.3L316.8,645.0L319.6,647.3L321.2,647.3L321.0,645.8L318.2,643.3L320.5,636.3L323.0,638.4L323.0,637.8L324.2,637.0L324.3,635.9L325.9,635.5L326.2,634.8L326.8,634.7L327.6,635.7L332.7,636.8L332.4,633.1L334.3,633.5L334.1,631.8L334.6,630.9L337.9,632.5L338.9,634.5L340.9,636.5L343.4,636.8L344.6,637.8L345.8,636.7L348.7,636.9L350.9,633.3L351.0,631.8L349.0,630.4L350.6,626.7L350.4,625.3L351.8,624.5L352.0,623.3L353.1,622.3L355.5,621.1L356.3,619.4L359.3,618.3L360.7,616.0L360.1,615.0L361.4,613.8L363.4,613.7L363.6,612.9L365.4,613.9L366.9,611.5L365.0,610.6L364.6,609.4L363.3,610.4L362.6,609.9L360.8,610.0L359.8,609.1L357.8,609.1L357.6,608.3L356.1,607.7L354.7,605.5L353.2,607.1L350.1,607.0L348.9,607.6L348.5,606.1L346.8,605.2L347.4,604.1L347.2,603.4L345.8,602.3L345.4,602.8L344.3,602.5L344.0,603.0L343.3,602.4L342.0,602.4L339.1,604.7L337.7,603.9L336.6,602.5L336.9,601.5L337.8,600.8L339.1,600.9L338.9,599.8L340.1,599.4L340.3,598.4L341.4,598.3L341.8,596.7L340.3,595.8L336.8,597.3L335.3,595.1L333.6,595.3L332.0,593.2L329.3,594.9L329.3,596.2L328.6,596.8L325.5,594.7L324.4,597.3L323.8,597.8L318.6,599.2L317.9,597.8L318.7,596.5L317.5,595.6L317.2,593.7L314.5,592.3L313.3,592.6L309.9,595.0L309.5,595.6L310.4,597.4L310.5,600.5L309.7,601.7L308.5,601.4L307.9,602.9L305.6,601.7L304.8,602.0L304.8,602.6L299.1,603.8L296.5,601.0L295.6,596.7L295.0,597.1L294.2,599.9L293.4,599.8L291.2,604.5L288.9,604.1L287.9,603.0L286.4,602.9L287.2,604.0L287.0,607.7L285.8,609.1L284.2,609.5L284.5,611.2L282.5,610.6L281.6,611.9L281.8,613.3L280.9,614.0L277.7,612.3L277.1,613.1L276.1,613.3L275.3,612.6L273.9,613.1L273.1,613.7L273.2,615.6L272.2,616.9L270.8,617.9L268.1,618.2L267.3,619.7L268.6,621.3L268.4,621.6L267.5,621.6L266.6,623.1L265.2,623.3L264.9,622.8L262.8,624.5L260.3,625.1L260.9,626.4L259.7,628.7Z"], "lx": 296.0, "ly": 643.0, "north": false}, {"name": "충청남도", "short": "충남", "paths": ["M188.0,658.3L188.5,658.8L188.8,657.7L188.2,657.6L188.0,658.3Z", "M188.0,658.4L186.8,656.8L183.8,658.2L183.9,659.6L183.0,659.5L183.2,660.9L184.3,662.5L184.6,669.5L184.0,671.2L184.5,671.4L184.5,673.9L186.6,674.0L186.4,675.4L187.7,676.9L189.2,675.8L192.1,678.1L191.7,677.0L192.6,676.2L192.3,674.2L190.5,672.6L191.3,671.8L190.6,669.6L189.8,668.9L190.1,667.5L189.5,666.5L188.2,666.1L188.9,665.3L188.0,663.8L188.3,663.1L188.0,661.5L186.7,660.8L188.0,660.1L188.0,658.4Z", "M213.1,618.0L208.4,618.0L200.0,613.8L199.3,612.1L197.7,611.6L195.0,615.9L195.4,617.4L194.2,618.2L194.1,617.4L192.0,616.6L186.9,617.4L186.5,617.0L184.3,618.8L184.5,619.5L188.4,620.1L188.1,620.7L188.9,620.7L188.9,621.3L188.2,621.2L187.6,622.0L187.1,621.3L184.8,621.6L186.0,621.9L186.1,622.8L187.0,623.1L186.8,624.2L187.9,623.4L189.2,625.1L190.6,624.5L191.5,625.4L190.7,626.3L191.2,627.4L192.5,628.0L189.6,628.8L189.7,630.0L188.0,629.9L187.2,630.5L187.8,631.3L187.6,632.3L186.7,633.1L187.3,634.7L186.4,634.8L185.4,633.2L185.9,632.0L184.7,631.7L183.5,633.7L185.0,636.3L182.5,636.6L181.6,638.2L181.1,638.1L181.2,636.7L180.6,636.3L180.8,635.5L183.3,634.8L183.4,634.3L181.6,633.8L183.1,629.7L184.1,629.5L184.2,629.0L183.6,628.9L183.6,627.7L182.1,626.1L182.9,625.1L182.2,623.9L182.9,622.5L182.1,620.4L181.7,621.1L181.0,621.2L181.6,625.1L180.9,627.7L180.3,628.3L177.7,626.9L174.5,628.0L174.0,629.2L172.8,629.3L174.1,632.5L172.4,634.8L173.3,635.6L173.0,636.8L172.0,636.9L171.7,634.3L170.9,633.3L170.7,634.3L170.1,634.4L171.2,635.4L170.7,636.8L169.8,637.2L170.3,637.7L170.0,638.9L169.2,640.4L167.5,640.7L169.1,644.0L168.4,644.9L167.9,647.0L168.2,647.3L170.4,644.7L170.3,643.2L169.6,642.6L170.8,642.4L173.1,642.7L173.1,643.5L175.0,644.9L174.4,645.9L175.4,645.3L176.0,645.8L175.6,647.0L174.8,647.5L171.7,646.3L171.0,647.5L170.4,647.5L170.8,650.3L173.8,650.4L175.1,648.7L176.8,648.4L177.3,647.7L177.0,646.2L178.4,646.2L179.7,645.0L180.0,647.7L179.1,648.6L179.3,650.7L180.9,650.9L182.2,654.2L182.2,655.4L181.2,656.5L180.8,658.6L181.5,659.5L182.3,658.7L183.2,659.2L185.2,656.4L187.3,655.3L191.1,656.5L191.2,657.2L194.3,658.5L195.0,659.7L195.6,662.0L195.0,663.2L196.9,665.4L196.2,668.8L196.3,670.2L196.9,670.9L196.8,672.5L197.8,673.5L197.5,674.1L197.9,674.7L199.9,673.4L200.3,673.9L197.6,675.3L196.4,679.7L198.6,679.9L201.4,682.5L202.5,682.7L201.2,684.1L199.4,684.5L198.1,685.5L201.6,691.3L200.2,694.0L200.7,697.8L199.7,699.4L199.9,701.0L199.1,702.1L197.3,702.1L197.3,704.3L198.1,705.0L197.9,703.9L198.4,702.9L199.4,702.7L200.9,703.2L202.5,705.0L203.1,704.0L203.8,704.1L205.0,705.1L206.6,708.3L207.0,707.7L208.1,707.9L209.3,709.0L208.1,709.8L208.1,712.5L209.2,712.3L211.1,714.8L210.5,715.0L210.5,716.8L211.0,717.5L211.6,717.0L216.4,717.9L217.3,715.4L221.6,714.6L223.0,712.9L226.4,711.9L226.9,711.2L227.2,706.9L228.4,704.0L230.8,704.3L233.7,702.3L235.3,703.1L237.5,702.9L238.4,703.2L239.0,704.3L240.7,704.1L242.0,705.4L241.6,706.6L241.8,708.4L244.2,710.8L245.1,710.4L246.7,711.6L247.5,711.2L247.6,709.8L248.6,708.9L249.5,709.6L251.4,708.5L252.7,709.4L253.2,707.9L253.8,707.9L254.8,708.0L256.6,709.6L257.1,709.2L256.4,708.3L256.9,706.6L258.6,707.2L260.2,706.6L260.4,705.7L261.1,705.4L262.1,706.0L262.5,704.9L263.8,705.0L265.0,707.1L264.4,708.1L265.4,709.0L265.4,712.6L266.5,713.8L266.7,715.6L268.6,717.1L271.2,715.0L271.5,717.0L272.0,717.1L273.0,719.6L273.9,719.1L275.4,720.1L276.3,719.2L276.9,720.0L279.3,718.3L278.9,717.2L279.4,716.9L279.4,715.3L278.9,713.8L281.7,714.9L282.2,715.6L283.6,715.4L285.4,717.8L285.7,717.1L285.3,715.3L287.4,714.7L286.4,713.7L285.7,714.0L285.9,711.5L287.2,711.1L286.8,709.8L285.6,708.6L285.7,707.1L283.4,704.5L284.4,701.9L283.7,700.2L284.1,696.2L282.6,694.7L279.9,695.4L280.3,694.1L278.9,692.9L277.8,693.9L275.8,694.2L274.6,695.0L273.8,695.7L273.9,696.5L272.8,697.3L272.9,697.8L272.0,698.5L269.2,696.7L269.4,696.3L268.5,694.7L267.5,694.5L267.8,691.7L266.8,690.8L265.6,691.1L265.4,691.7L265.7,696.1L263.2,699.5L263.3,697.9L262.6,697.6L261.9,695.9L261.2,695.3L260.2,695.6L259.3,694.1L259.1,692.7L260.0,691.6L257.4,690.4L256.5,688.9L257.5,688.3L257.5,685.2L258.0,685.1L258.0,684.2L259.0,683.5L258.4,681.9L259.2,680.5L259.3,676.5L258.0,676.3L256.8,677.3L256.1,676.1L252.9,674.1L252.7,672.8L253.2,672.1L252.1,670.1L252.4,669.0L251.0,668.7L250.7,668.3L251.1,667.8L250.5,667.1L251.4,665.9L250.8,663.8L252.1,663.3L251.8,662.7L253.4,660.2L252.3,659.9L252.1,658.6L249.3,657.3L248.9,656.2L249.5,654.5L249.3,652.7L249.7,652.4L249.3,651.6L250.0,650.2L249.7,649.2L248.4,649.1L247.8,647.5L247.2,647.2L249.6,644.8L250.6,644.8L253.1,645.4L255.7,647.3L256.4,648.4L259.5,649.0L261.3,647.6L261.5,645.7L262.7,644.7L263.6,645.1L264.1,644.5L263.3,643.4L263.5,642.8L266.1,641.9L267.5,642.1L268.9,643.4L269.7,642.4L270.1,641.9L269.5,640.7L268.1,639.6L268.7,638.5L267.9,637.4L265.2,635.8L265.1,635.2L263.3,634.8L263.5,632.6L261.1,631.7L261.5,631.2L261.3,629.5L259.7,628.7L258.4,626.7L253.7,625.1L253.0,622.9L251.3,622.4L251.1,621.8L249.3,621.6L249.6,621.1L247.2,621.4L246.1,620.9L244.7,622.1L245.2,622.8L244.6,623.8L243.9,623.3L239.7,625.2L236.7,624.5L230.6,627.4L229.5,629.3L226.2,630.1L222.7,628.4L222.4,625.8L220.8,624.5L220.9,623.6L219.8,621.4L220.0,620.6L213.1,618.0Z", "M196.9,667.2L196.5,666.3L197.9,664.8L201.5,667.3L201.0,667.6L199.7,666.0L198.3,665.6L196.9,667.2Z", "M206.9,669.2L205.9,670.7L203.1,671.0L203.0,672.8L202.0,672.7L202.4,671.7L201.7,671.4L201.7,673.0L200.8,673.1L200.4,674.0L199.9,673.3L200.1,672.3L202.6,670.2L202.6,669.6L204.7,670.5L206.9,669.2Z"], "lx": 225.3, "ly": 668.0, "north": false}, {"name": "전라북도", "short": "전북", "paths": ["M213.5,718.3L210.2,718.9L210.2,719.3L212.7,719.2L213.5,718.3Z", "M287.2,711.1L285.9,711.5L285.7,714.0L286.4,713.7L287.4,714.7L285.3,715.3L285.7,717.1L285.4,717.8L283.6,715.4L282.2,715.6L281.7,714.9L278.9,713.8L279.4,715.3L279.0,718.7L276.9,720.0L275.9,719.3L275.4,720.1L273.9,719.1L273.0,719.6L272.0,717.1L271.5,717.0L271.2,715.0L268.6,717.1L266.7,715.6L266.5,713.8L265.4,712.6L265.4,709.0L264.4,708.1L265.0,707.1L263.8,705.0L262.5,704.9L262.1,706.0L261.1,705.4L260.4,705.7L260.2,706.6L258.6,707.2L256.9,706.6L256.4,708.3L257.1,709.2L256.6,709.6L254.8,708.0L253.8,707.9L253.2,707.9L252.7,709.4L251.4,708.5L249.5,709.6L248.6,708.9L247.6,709.8L247.5,711.2L246.7,711.6L245.1,710.4L244.2,710.8L241.8,708.4L241.6,706.6L242.0,705.4L240.7,704.1L239.0,704.3L238.4,703.2L237.5,702.9L235.3,703.1L233.7,702.3L230.8,704.3L228.4,704.0L227.2,706.9L226.9,711.2L226.4,711.9L223.0,712.9L221.6,714.6L217.3,715.4L216.8,716.7L217.9,716.9L217.2,718.7L216.4,719.4L213.8,718.5L212.1,719.5L207.4,720.1L207.6,720.8L206.7,720.0L199.8,720.6L199.5,723.1L200.4,724.2L197.5,733.2L196.7,733.3L197.1,734.1L195.9,735.7L193.9,734.7L193.3,735.0L194.1,736.0L193.7,736.6L195.7,736.8L197.5,734.7L200.5,724.5L202.8,724.4L203.0,725.6L204.7,725.8L204.7,723.1L205.2,723.1L206.9,723.7L206.5,726.2L206.8,728.8L211.0,729.5L211.5,729.0L212.2,733.7L212.7,733.8L212.9,735.4L214.1,738.2L209.9,738.7L208.2,737.9L207.4,739.2L207.8,739.7L207.9,743.0L203.2,748.6L199.3,744.1L196.5,736.9L199.2,744.2L202.2,748.1L200.5,748.8L200.0,750.3L194.5,754.3L195.2,754.4L195.4,755.0L195.4,756.0L194.7,756.8L198.5,759.9L199.0,759.1L199.1,759.8L200.1,759.9L205.2,758.8L209.7,759.8L210.2,759.2L211.0,760.6L210.6,762.1L209.6,760.8L208.3,760.4L207.6,761.0L206.8,760.8L206.5,762.1L205.3,763.8L204.2,763.4L199.9,764.4L197.8,765.5L197.6,766.1L196.5,766.0L192.2,774.3L196.2,775.2L197.2,777.0L197.1,778.3L196.0,779.2L197.6,780.4L197.2,782.4L197.5,782.8L198.8,781.6L199.4,783.1L198.9,785.1L200.4,787.1L201.6,786.5L203.5,786.8L204.5,787.7L204.8,786.1L204.2,786.2L204.7,784.7L206.0,784.3L207.7,785.7L209.1,785.8L210.9,782.7L213.5,782.8L213.9,781.3L215.0,781.3L216.1,779.5L215.3,777.8L217.8,776.0L217.6,774.3L216.5,772.9L217.3,772.8L218.6,771.1L222.5,771.0L222.5,769.4L223.5,769.2L224.8,770.0L224.7,771.4L226.9,771.7L229.0,773.0L229.4,775.5L230.5,776.3L230.6,777.6L231.6,777.2L232.0,778.4L235.3,777.8L234.9,775.1L235.7,775.2L235.9,774.2L236.7,773.9L237.3,771.4L238.2,772.1L239.8,771.2L240.0,774.4L241.2,775.2L240.8,777.6L239.2,777.8L239.5,778.8L240.8,780.1L241.4,779.5L242.6,781.3L242.2,782.2L242.6,783.9L241.2,783.8L240.5,785.6L245.4,787.9L248.6,786.7L250.3,784.6L251.6,784.5L251.8,785.6L253.6,786.3L254.4,784.3L255.3,784.5L257.3,786.6L259.6,786.4L261.4,787.4L264.9,785.6L267.3,787.6L270.2,782.7L271.5,781.6L274.1,781.3L277.5,782.7L282.5,786.9L284.6,786.0L286.1,783.6L285.0,781.2L286.3,780.1L287.1,777.9L289.0,776.4L289.4,774.3L290.0,773.4L287.8,772.9L287.0,771.6L287.1,770.1L288.4,769.2L288.2,768.1L286.9,766.6L286.2,764.7L283.2,762.1L283.9,760.5L285.1,759.5L284.8,758.4L285.4,756.9L287.0,756.0L285.8,753.6L286.5,751.5L287.3,750.9L287.5,748.6L289.0,746.9L289.4,741.0L290.5,741.0L292.1,739.0L293.6,738.2L295.6,733.5L296.6,734.2L297.8,733.9L299.0,732.6L300.3,732.0L300.7,732.4L302.0,731.1L303.2,731.3L304.2,729.8L303.9,728.9L304.7,727.2L306.6,726.9L306.5,724.9L308.3,723.9L308.7,723.0L308.1,722.5L307.5,720.2L307.0,720.0L307.3,719.2L305.9,718.2L306.0,715.7L305.3,715.5L304.1,714.0L299.7,715.4L299.0,716.5L297.3,716.7L296.8,716.3L296.8,715.4L292.4,714.5L291.2,711.7L289.7,712.8L290.0,713.8L288.9,714.0L288.5,712.3L287.2,711.1Z"], "lx": 245.0, "ly": 742.9, "north": false}, {"name": "경상북도", "short": "경북", "paths": ["M427.2,628.8L427.2,623.0L426.3,620.1L427.1,618.1L426.5,615.0L426.9,614.5L426.8,612.8L427.8,611.7L424.1,608.2L423.4,605.1L423.7,604.8L422.8,603.5L421.3,603.5L419.8,603.9L417.4,606.7L415.5,606.5L415.1,607.9L413.8,608.5L411.9,610.7L412.5,611.7L412.2,612.4L412.5,613.7L408.8,613.9L406.9,611.2L401.7,608.1L399.8,609.3L398.9,611.6L397.1,610.5L393.0,609.6L391.0,610.3L390.0,608.7L388.2,608.9L387.2,611.5L386.2,612.5L386.2,613.4L384.7,612.8L384.5,613.6L382.2,612.9L381.0,611.4L380.8,610.2L379.1,610.5L378.5,610.2L378.5,609.4L377.0,608.9L375.8,611.7L375.1,611.4L374.8,612.7L375.5,614.5L374.4,615.1L373.4,614.1L370.7,614.0L369.8,612.8L366.9,611.5L365.4,613.9L363.6,612.9L363.4,613.7L361.4,613.8L360.1,615.0L360.7,616.0L359.3,618.3L356.3,619.4L355.5,621.1L353.1,622.3L352.0,623.3L351.8,624.5L350.4,625.3L350.6,626.7L349.0,630.4L351.0,631.8L350.9,633.3L348.7,636.9L345.8,636.7L344.6,637.8L343.4,636.8L340.9,636.5L338.9,634.5L337.9,632.5L334.6,630.9L334.1,631.8L334.3,633.5L332.4,633.1L332.7,636.8L327.6,635.7L326.8,634.7L326.2,634.8L325.9,635.5L324.3,635.9L324.2,637.0L323.0,637.8L323.0,638.4L320.5,636.3L318.2,643.3L321.0,645.8L321.2,647.3L319.6,647.3L316.8,645.0L315.8,646.3L314.6,646.3L312.3,644.5L311.7,647.2L310.4,647.4L310.1,648.9L307.3,648.6L306.2,650.2L307.8,649.8L308.8,650.3L309.2,651.2L310.3,651.6L310.9,653.4L310.4,656.1L309.7,656.5L309.8,657.7L309.4,657.9L308.4,655.4L307.1,655.1L306.2,652.4L304.8,654.5L303.8,654.6L303.9,656.1L304.3,656.3L303.2,657.2L301.6,656.9L299.8,658.0L299.8,659.4L301.9,660.9L304.7,661.2L305.5,662.1L305.5,663.7L306.2,664.5L308.0,665.2L308.3,667.3L305.9,669.2L306.4,671.8L305.6,673.9L305.7,675.6L306.4,675.9L305.7,677.3L305.0,677.7L306.6,680.0L307.1,682.0L306.4,683.4L304.1,685.0L303.2,687.0L304.0,690.6L306.4,690.6L308.1,687.8L308.4,689.3L310.2,690.2L312.5,692.7L313.4,692.9L314.2,691.6L316.5,690.8L317.7,691.2L319.4,692.3L318.0,694.0L320.1,697.7L318.7,698.5L317.6,697.3L316.4,697.0L314.4,697.9L313.7,699.2L315.4,702.5L314.7,703.2L314.8,704.7L312.9,706.7L313.2,707.5L312.4,708.9L312.6,710.9L310.7,712.8L309.1,712.5L306.0,715.7L305.9,718.2L307.3,719.2L307.0,720.0L307.5,720.2L308.1,722.5L308.7,723.0L308.3,723.9L306.5,724.9L306.9,726.4L306.4,727.6L306.6,728.6L307.3,729.2L309.3,728.9L310.1,729.8L310.2,732.3L311.1,732.4L311.7,731.7L313.6,732.7L314.2,732.0L315.4,734.1L316.6,735.0L318.0,734.3L319.7,734.9L321.1,733.8L325.0,735.4L325.8,738.9L326.5,739.5L327.8,739.2L328.5,740.2L328.6,741.5L330.5,742.7L331.2,744.3L331.8,749.5L328.8,750.5L328.2,751.1L328.4,752.5L330.2,752.1L331.5,753.5L333.7,753.9L334.2,753.8L334.7,752.4L336.3,753.6L337.6,752.6L339.7,752.3L341.1,753.2L343.1,753.2L344.3,756.4L344.9,756.8L346.2,756.1L347.2,754.6L347.1,753.3L344.1,750.3L343.3,747.5L343.9,747.0L348.1,748.3L349.1,748.0L349.8,747.2L349.6,745.3L346.4,743.0L345.8,741.9L348.7,737.0L352.6,737.3L353.6,735.8L353.5,734.9L351.0,733.2L345.8,732.6L347.0,727.9L347.7,727.8L349.3,725.0L351.2,724.3L351.3,723.6L353.1,724.5L352.8,726.5L352.2,727.0L352.4,727.9L355.3,729.0L355.7,726.9L357.3,725.5L357.7,724.1L357.7,722.1L357.0,720.4L357.4,719.9L359.1,721.8L359.4,720.7L363.0,719.3L364.3,717.3L370.3,716.3L372.8,717.7L373.4,718.6L373.1,719.4L374.3,720.6L373.7,722.2L374.1,723.5L373.6,725.1L375.4,727.2L375.4,731.3L373.7,732.8L372.7,732.1L372.6,733.9L371.3,735.2L372.0,737.2L369.3,738.9L370.3,742.3L370.0,744.8L369.3,745.7L367.8,745.8L366.4,747.1L364.4,747.6L363.6,745.4L363.9,744.2L362.4,744.2L362.0,744.7L361.3,744.0L359.9,744.3L357.1,746.6L357.7,748.5L357.1,750.5L357.9,751.9L357.9,755.5L359.6,756.4L359.8,757.6L361.6,759.2L363.0,759.9L365.7,759.4L367.2,758.1L369.7,758.4L370.9,760.1L372.6,759.7L375.2,761.1L377.2,761.2L377.9,760.8L378.6,759.1L380.6,758.2L381.9,759.0L382.6,758.4L384.3,755.7L384.4,754.6L384.9,754.3L385.4,755.0L387.6,753.8L389.6,754.4L391.2,756.3L393.2,756.9L395.9,754.4L397.0,754.7L397.9,752.8L400.6,753.5L399.6,752.0L399.7,749.6L400.3,748.6L402.2,747.3L404.8,746.7L405.8,745.4L406.8,746.4L408.3,746.2L408.5,745.5L409.7,746.3L410.4,745.8L412.6,747.5L414.4,747.8L414.9,748.8L414.3,751.8L417.2,753.4L418.7,751.8L420.0,752.0L420.5,750.9L422.0,749.9L423.5,750.9L425.7,751.2L429.6,752.8L429.9,751.4L430.8,751.2L430.7,750.4L431.6,748.6L431.4,747.3L431.9,747.1L432.4,744.9L432.3,743.5L433.1,742.6L432.8,739.2L434.5,736.2L434.3,735.6L435.1,734.1L435.1,732.8L436.2,731.1L435.0,730.5L435.1,729.7L435.8,729.6L435.5,728.3L436.2,728.0L435.0,725.2L437.5,721.8L437.6,719.4L438.8,718.9L438.7,718.2L440.1,716.3L439.6,715.5L440.1,713.3L438.9,711.1L439.0,710.2L437.9,709.3L437.2,709.4L435.9,712.3L433.9,714.2L433.8,715.3L430.3,717.6L430.0,718.6L427.9,718.2L426.9,717.3L427.4,716.6L426.2,717.0L425.3,716.1L426.2,715.0L428.1,714.9L425.8,714.0L424.5,715.1L423.8,712.9L424.3,711.7L425.3,711.6L427.2,710.3L427.2,709.1L427.8,708.4L428.8,708.2L428.8,706.9L427.5,706.4L425.3,703.9L425.7,701.5L425.0,699.5L423.9,699.0L423.5,697.9L423.5,697.3L424.5,696.5L424.2,694.7L424.6,694.0L423.5,692.5L424.2,690.5L423.7,689.4L424.3,683.9L426.2,679.2L428.0,677.1L428.5,675.4L428.6,671.4L428.2,670.3L429.8,667.4L428.9,665.7L428.8,662.8L426.6,659.4L426.7,655.6L428.9,650.7L430.8,650.1L431.6,648.2L431.3,646.0L431.7,645.2L431.0,642.3L431.8,641.3L430.6,639.2L430.1,636.6L427.8,632.9L426.9,629.1L427.2,628.8Z", "M544.4,564.0L543.7,563.3L542.7,564.1L541.5,563.9L535.0,566.3L536.0,567.6L535.8,569.8L536.4,570.7L541.4,572.8L542.3,571.1L544.4,569.8L544.9,566.8L544.1,565.5L544.4,564.0Z", "M622.0,594.0L621.7,593.0L620.0,592.0L619.1,592.3L618.1,594.0L618.3,595.0L620.0,596.0L621.0,595.7L622.0,594.0Z", "M619.4,593.8L619.2,593.0L617.8,592.2L617.1,592.4L616.3,593.8L616.5,594.6L617.8,595.4L618.6,595.2L619.4,593.8Z"], "lx": 374.6, "ly": 683.0, "north": false, "extraLabels": [{"x": 618.9, "y": 582.1, "text": "독도"}]}, {"name": "경상남도", "short": "경남", "paths": ["M343.5,833.9L341.7,835.3L342.4,835.9L342.8,835.2L345.5,836.2L345.2,837.9L344.3,838.0L345.2,838.8L345.3,838.2L346.2,838.7L346.3,839.8L346.9,839.8L346.9,841.1L349.1,841.2L349.9,839.7L349.1,838.9L349.8,838.8L350.2,838.3L349.9,837.7L350.3,837.5L350.4,835.6L349.9,834.9L347.7,834.3L346.4,835.1L343.6,834.4L343.5,833.9Z", "M318.2,825.7L317.2,825.7L315.3,826.8L313.9,829.8L312.7,830.8L312.9,832.5L313.4,833.5L314.7,834.1L317.2,833.9L317.5,833.0L322.3,834.8L321.7,833.4L320.4,833.0L320.6,832.3L319.9,832.4L320.9,830.9L319.3,828.0L317.4,829.6L317.7,831.0L317.3,831.4L316.4,831.0L316.9,828.5L318.2,825.7Z", "M308.1,831.7L307.7,830.6L307.9,829.4L309.8,828.6L309.5,827.7L310.1,826.2L309.6,823.6L308.0,823.6L307.4,823.1L305.1,824.1L304.0,826.2L305.0,827.4L302.8,827.9L302.1,830.4L301.4,830.3L300.6,832.4L301.0,834.3L304.1,840.8L303.2,841.0L302.9,842.8L304.2,843.0L305.2,845.0L307.1,845.5L308.8,844.1L308.0,841.4L311.3,839.9L312.1,840.5L311.3,843.0L312.4,846.8L314.4,846.8L314.4,845.9L315.1,845.8L316.2,846.6L316.5,845.4L317.7,846.0L317.2,847.4L318.0,846.9L319.1,847.5L320.4,846.8L318.4,845.6L318.5,844.6L320.1,843.2L319.5,839.6L320.1,838.9L319.8,837.6L320.5,837.8L320.8,836.5L320.4,835.7L318.9,835.5L318.1,834.3L314.9,834.5L313.0,836.2L313.0,836.9L312.0,837.2L311.2,836.7L310.6,834.5L309.2,834.2L308.1,831.7Z", "M368.6,839.1L368.0,838.5L368.0,836.7L368.6,836.3L369.9,836.9L369.7,837.9L370.6,837.9L370.4,837.0L371.1,836.4L371.9,837.7L371.4,838.3L373.1,838.5L373.6,839.1L373.8,838.5L372.4,836.3L372.6,834.6L372.0,834.2L371.5,834.9L370.9,834.5L370.9,833.5L372.0,832.8L372.6,833.6L373.5,833.2L372.5,831.3L373.0,831.0L373.3,831.5L374.1,830.9L373.8,829.3L373.4,828.7L372.6,829.0L371.5,830.8L371.1,830.5L371.4,830.1L370.4,829.7L370.4,828.6L372.0,827.6L371.8,826.5L372.5,826.4L371.8,824.1L372.2,823.6L372.7,824.1L372.8,823.2L371.8,822.0L371.9,821.3L370.5,820.7L370.3,819.9L370.7,818.7L370.2,818.6L370.2,818.0L371.3,816.8L371.6,817.1L372.2,815.8L371.6,814.6L368.7,814.7L368.2,817.1L369.2,818.8L368.6,818.9L368.4,817.9L367.1,818.7L366.5,821.8L364.7,821.4L363.5,822.0L363.3,820.8L362.6,821.2L362.7,822.4L361.7,823.1L362.2,824.2L363.7,825.5L363.4,826.3L364.1,826.4L364.7,828.5L364.2,828.6L363.7,827.6L362.0,827.1L361.8,826.3L360.6,826.9L360.9,827.4L360.4,827.9L357.2,825.6L356.2,826.8L354.3,827.7L352.8,830.5L353.5,833.7L355.1,834.4L355.8,836.8L357.2,835.6L357.2,834.4L359.8,834.5L360.6,832.3L361.9,833.1L361.6,834.4L362.4,835.2L361.6,836.0L361.6,838.0L358.9,838.7L358.2,839.9L359.6,838.7L360.3,839.1L359.1,840.1L359.3,841.1L361.1,839.9L362.6,840.1L362.2,840.6L362.9,841.1L362.8,841.4L361.2,841.6L361.0,843.5L363.4,844.5L361.7,845.4L361.9,846.0L361.2,846.2L361.0,847.4L362.5,846.9L363.6,847.5L365.0,846.4L365.7,847.0L366.1,846.2L364.4,844.6L365.0,844.0L365.1,844.6L366.8,844.3L366.9,843.8L368.5,844.4L369.2,843.7L368.2,843.2L366.9,843.5L365.8,841.6L366.2,840.1L367.4,840.3L368.6,839.1Z", "M351.9,808.8L350.8,808.0L351.1,807.4L353.5,807.8L354.6,807.1L356.3,808.0L357.8,805.8L358.8,807.1L358.5,808.0L361.0,808.7L359.9,810.2L361.5,811.2L362.1,810.5L362.5,811.0L360.7,812.4L365.5,810.9L364.7,810.4L364.0,810.8L363.2,809.7L364.9,809.3L362.9,807.4L362.7,804.5L360.9,804.8L361.2,803.8L361.8,804.7L362.6,803.6L361.7,801.3L360.5,800.3L360.0,799.1L361.8,796.8L363.5,796.6L362.0,797.9L362.3,800.5L363.5,802.0L364.1,803.8L364.6,803.9L365.1,802.9L366.1,803.2L366.3,804.2L367.4,804.1L368.0,805.9L368.9,805.3L368.4,803.5L369.7,803.1L370.6,805.2L370.7,806.2L369.8,807.5L370.3,808.1L371.0,807.2L371.9,807.4L371.8,808.2L372.6,808.1L373.8,809.4L375.7,810.0L375.9,811.1L376.4,811.3L376.5,809.6L377.3,808.0L375.8,808.0L375.6,807.3L376.3,807.9L377.6,806.4L377.9,807.9L378.7,808.0L377.1,809.2L377.4,810.0L379.4,810.0L379.4,809.5L380.8,808.8L380.1,808.1L380.4,807.6L381.3,807.6L381.9,806.5L381.1,804.8L379.7,804.5L378.0,802.1L381.9,802.0L383.1,801.0L384.2,801.4L384.0,801.9L384.9,801.8L384.5,800.7L384.9,799.5L384.0,797.6L384.7,796.8L387.4,795.5L388.0,796.2L389.5,795.1L392.1,795.1L393.8,794.4L395.6,790.3L398.0,790.1L398.8,788.3L400.1,788.7L403.1,786.8L404.7,782.8L404.1,781.5L404.5,781.2L407.9,782.6L409.4,781.7L409.9,780.2L409.4,779.6L411.4,777.1L410.1,775.7L409.7,773.9L407.4,774.7L406.7,774.2L403.8,771.5L402.8,769.9L402.6,768.3L398.4,766.4L398.6,764.6L395.8,765.4L393.9,765.1L394.1,763.7L393.4,762.7L392.7,763.2L392.1,762.2L392.0,761.8L395.7,759.5L396.0,756.5L394.4,755.8L392.9,757.0L391.2,756.3L389.6,754.4L387.6,753.8L385.4,755.0L384.9,754.3L383.6,757.0L381.9,759.0L380.6,758.2L378.6,759.1L377.9,760.8L375.2,761.1L372.6,759.7L370.9,760.1L369.7,758.4L367.2,758.1L365.7,759.4L363.0,759.9L361.6,759.2L359.8,757.6L359.6,756.4L357.9,755.5L357.9,751.9L357.1,750.5L357.3,749.6L355.7,750.4L355.4,753.9L350.7,754.0L349.6,755.5L348.9,755.3L345.7,757.2L344.3,756.4L343.1,753.2L341.1,753.2L339.1,752.2L338.9,752.8L337.6,752.6L336.3,753.6L334.7,752.4L334.2,753.8L333.7,753.9L331.5,753.5L330.2,752.1L328.4,752.5L328.2,751.1L328.8,750.5L331.8,749.5L331.2,744.3L330.5,742.7L328.6,741.5L328.5,740.2L327.8,739.2L326.5,739.5L325.8,738.9L325.0,735.4L321.1,733.8L319.7,734.9L318.0,734.3L316.6,735.0L315.4,734.1L314.2,732.0L313.6,732.7L311.7,731.7L311.1,732.4L310.2,732.3L310.1,729.8L309.3,728.9L307.3,729.2L306.6,728.6L306.6,726.9L304.7,727.2L303.9,728.9L304.2,729.8L303.2,731.3L302.0,731.1L300.7,732.4L300.3,732.0L299.0,732.6L297.8,733.9L296.6,734.2L295.6,733.5L293.6,738.2L292.1,739.0L290.5,741.0L289.4,741.0L289.0,746.9L287.5,748.6L287.3,750.9L286.5,751.5L285.8,753.6L287.0,756.0L285.4,756.9L284.8,758.4L285.1,759.5L283.9,760.5L283.2,762.1L286.2,764.7L286.9,766.6L288.2,768.1L288.4,769.2L287.1,770.1L287.0,771.6L287.8,772.9L290.0,773.4L289.4,774.3L289.0,776.4L287.1,777.9L286.3,780.1L285.0,781.2L286.1,783.6L285.9,784.6L284.6,786.0L282.5,786.9L282.5,788.3L283.9,791.0L285.0,791.6L285.9,795.3L285.7,798.7L286.2,799.5L291.2,804.3L291.7,807.2L293.4,809.4L294.7,810.2L295.2,811.4L297.4,812.7L298.9,816.7L298.4,818.7L296.8,821.1L297.6,821.1L297.9,822.3L298.5,823.4L299.2,823.5L299.6,824.7L303.0,822.7L303.1,821.5L304.0,823.0L306.4,822.8L308.7,820.3L308.5,819.4L309.2,818.9L309.6,816.3L311.0,817.6L310.3,818.6L310.6,819.6L311.7,820.1L311.6,819.3L312.3,819.3L312.7,818.3L313.5,818.4L313.6,819.3L314.8,820.1L315.4,818.2L316.3,819.5L317.1,816.7L316.5,816.5L315.4,814.0L314.3,814.1L314.4,813.3L316.1,813.6L316.1,814.5L316.8,814.9L317.4,814.7L318.1,812.8L317.7,812.1L319.9,809.6L320.2,810.2L318.8,812.1L319.0,814.7L318.4,815.5L319.2,815.3L319.6,816.2L318.7,817.6L319.7,820.7L318.1,822.2L319.8,824.6L324.0,825.5L323.6,826.3L324.4,827.5L325.3,827.4L326.3,828.8L326.7,827.5L327.4,827.7L327.9,826.9L328.4,827.8L331.5,828.4L331.1,826.6L331.7,825.2L331.4,823.8L333.2,823.1L333.5,823.7L336.0,823.7L336.8,824.2L336.2,825.0L336.5,826.5L338.5,826.8L339.9,823.6L340.7,823.1L340.8,821.5L341.9,823.3L342.4,822.9L342.7,825.2L343.5,825.9L343.5,826.9L339.9,826.9L339.1,827.5L339.2,827.9L341.4,830.1L343.0,830.4L343.4,829.8L343.6,830.6L344.2,830.7L345.4,829.4L345.9,829.7L345.6,830.3L346.0,830.9L348.4,831.0L348.7,831.5L346.2,831.4L345.4,832.6L344.9,832.4L345.3,833.7L345.9,833.3L346.1,834.2L347.5,834.5L348.5,833.8L349.9,833.9L349.8,833.4L351.2,833.1L350.8,831.4L351.5,831.2L351.4,830.3L351.9,829.8L352.0,830.6L352.7,829.3L351.4,827.6L351.8,827.2L351.2,826.3L350.3,826.4L350.7,827.2L350.3,828.9L349.5,829.1L349.6,830.0L348.8,830.2L348.5,826.7L349.8,824.7L349.1,823.6L350.5,820.9L350.5,820.0L349.8,819.3L347.8,819.4L347.7,818.4L352.1,819.0L353.2,818.5L353.9,816.6L354.3,817.2L355.0,816.5L355.0,815.7L353.5,814.9L353.9,814.0L353.3,813.6L353.0,814.1L351.7,813.1L353.3,813.1L353.5,812.5L353.1,812.4L353.4,811.5L352.7,810.4L351.8,811.5L351.2,810.7L350.6,811.2L350.7,812.4L350.0,813.2L346.3,814.3L346.2,816.1L344.6,816.1L344.5,815.6L345.7,814.3L345.0,812.8L348.0,811.6L349.2,812.3L350.2,810.5L351.9,810.6L352.7,809.6L352.8,810.2L353.3,809.9L351.9,808.8Z"], "lx": 335.3, "ly": 787.8, "north": false}, {"name": "제주특별자치도", "short": "제주", "paths": ["M176.5,976.3L176.0,976.9L176.7,976.9L176.5,976.3Z", "M229.4,966.0L228.7,964.8L226.0,965.0L224.6,964.2L223.6,963.2L223.3,961.7L222.5,961.4L221.2,962.0L220.1,961.0L218.4,961.0L218.4,961.7L215.9,961.5L212.8,962.7L211.7,962.3L211.5,963.0L210.7,963.2L209.2,962.0L208.4,963.9L205.5,963.8L204.5,965.0L202.7,964.8L200.3,965.8L197.4,965.4L196.5,966.4L194.2,967.1L194.1,967.8L191.9,968.0L190.0,969.2L188.8,968.6L185.1,970.8L183.1,970.6L182.3,972.6L179.1,974.1L179.3,975.1L178.2,977.4L176.8,978.6L176.1,978.5L171.2,984.1L171.7,985.9L171.3,988.8L172.9,991.5L176.9,994.0L177.5,995.3L179.1,996.4L179.3,997.8L179.9,998.1L180.9,997.4L181.7,997.8L181.3,996.9L181.9,995.2L184.5,993.4L184.9,994.0L186.5,993.9L187.8,994.5L190.6,993.1L192.6,994.0L194.0,993.3L195.7,995.2L197.5,994.3L198.5,994.5L199.5,993.4L203.0,993.7L203.9,993.0L205.6,994.0L208.8,991.8L209.5,990.6L213.5,990.4L216.3,989.4L216.7,989.7L219.6,986.9L221.9,987.3L223.7,986.8L225.0,985.5L224.8,984.2L226.8,982.1L227.1,980.3L227.9,979.2L229.8,978.4L229.5,977.3L230.7,974.8L230.4,974.3L230.8,974.0L231.5,975.3L232.1,974.5L231.0,973.6L231.0,972.6L231.9,971.4L232.6,972.0L232.8,971.6L232.1,971.1L232.0,970.2L231.1,972.0L230.8,970.6L229.5,969.6L230.3,966.9L229.4,966.0Z"], "lx": 201.7, "ly": 979.5, "north": false}, {"name": "전남광주통합특별시", "short": "전남광주", "paths": ["M218.5,792.2L216.4,792.6L214.9,796.6L213.7,797.0L212.5,796.3L211.8,798.4L209.9,798.5L211.3,800.5L209.9,801.4L209.4,803.4L210.0,804.1L209.7,805.7L211.1,806.7L211.1,807.3L213.7,806.6L216.4,807.0L218.4,808.7L219.1,810.8L218.0,810.9L219.0,812.4L221.0,811.7L221.7,812.5L222.9,812.4L223.1,811.8L224.8,811.2L225.8,809.9L228.6,810.0L230.9,808.6L232.1,810.3L233.3,810.5L234.5,808.8L236.1,808.4L236.0,807.2L238.0,805.0L237.7,802.2L238.8,800.5L237.1,798.9L234.6,799.7L233.8,798.5L234.4,797.5L233.2,796.2L233.3,795.3L231.8,793.6L231.6,792.6L229.7,792.0L228.2,793.2L227.4,792.8L224.3,794.8L223.4,794.6L223.3,795.1L221.0,795.8L217.8,794.1L218.5,792.2Z", "M201.8,899.9L201.0,899.4L198.2,901.6L198.2,903.8L198.7,905.4L201.4,905.0L203.0,903.2L203.8,903.1L204.1,901.8L205.3,901.5L205.9,902.7L206.1,901.7L206.8,902.4L207.3,902.1L207.3,901.2L204.4,900.6L203.4,901.3L203.3,900.7L202.2,900.9L201.8,899.9Z", "M209.9,897.8L209.3,897.8L208.9,899.1L208.9,899.8L209.7,900.7L207.9,903.1L208.7,905.4L209.2,904.6L209.8,904.9L209.6,905.5L210.3,906.2L211.1,905.5L211.3,903.1L212.0,903.6L212.2,902.8L211.1,902.7L211.1,901.5L210.2,901.2L210.2,900.3L211.9,900.1L212.3,899.5L209.9,897.8Z", "M228.5,895.9L226.3,897.6L225.1,900.1L225.4,900.8L226.1,900.6L225.4,901.0L225.8,902.5L226.5,901.1L227.7,902.7L230.6,901.8L231.2,900.1L229.7,897.3L230.2,896.9L229.8,896.2L228.5,895.9Z", "M203.2,894.3L202.8,894.1L202.6,894.8L203.1,895.2L202.1,898.3L202.7,898.7L202.6,899.7L204.7,900.4L204.6,898.5L206.7,899.5L206.2,898.2L207.4,897.6L207.5,897.0L206.2,895.2L203.4,894.9L203.2,894.3Z", "M224.5,886.4L224.3,887.0L224.9,887.8L226.4,886.2L226.4,885.5L226.9,885.5L227.2,886.7L227.8,886.6L228.1,885.7L227.6,885.0L227.9,884.4L229.0,884.4L229.0,883.2L227.7,884.0L227.3,882.9L226.1,883.1L225.8,882.5L225.2,883.2L224.0,881.8L222.9,882.9L222.6,884.0L221.5,884.3L220.4,883.1L219.7,884.4L218.3,883.8L218.3,884.3L220.6,885.5L223.7,885.1L224.5,886.4Z", "M239.4,883.7L241.1,883.6L241.3,884.2L240.0,885.1L240.2,886.6L241.8,884.5L243.2,884.4L243.3,884.0L242.0,883.6L242.3,883.0L245.0,883.9L243.1,881.5L240.6,882.5L240.6,880.8L238.2,879.9L238.4,880.8L237.7,881.9L236.0,881.7L237.7,882.7L238.1,882.1L239.3,882.8L239.4,883.7Z", "M213.1,877.8L212.5,877.4L209.5,878.3L208.7,879.5L209.5,884.3L211.1,885.3L212.0,887.3L213.1,888.4L214.9,887.9L216.0,888.9L216.4,888.4L216.0,887.5L217.3,888.5L219.6,888.9L218.4,887.4L219.2,886.5L218.7,885.8L217.9,886.2L217.3,885.5L216.3,883.4L215.8,879.7L213.1,877.8Z", "M232.6,878.4L233.3,877.2L232.6,876.5L232.0,878.5L230.5,878.5L229.7,877.7L228.6,878.0L227.9,877.0L227.5,877.7L226.4,876.6L226.2,877.0L227.0,878.3L226.4,880.3L229.7,882.3L231.1,881.6L231.6,880.6L233.0,880.9L233.0,879.9L232.1,879.2L232.6,878.4Z", "M224.0,874.0L220.7,874.4L219.4,875.4L218.5,877.0L218.9,877.7L217.9,878.6L217.9,879.4L219.8,879.5L218.7,881.8L219.9,881.5L220.9,879.4L223.4,879.3L223.7,879.9L225.1,878.7L226.5,878.7L225.3,875.8L224.4,876.6L223.3,875.8L224.7,875.7L224.9,874.6L224.0,874.0Z", "M274.7,871.3L272.8,870.1L272.6,870.8L273.1,872.5L275.2,872.9L275.0,873.4L273.6,873.0L273.7,873.7L275.9,874.6L275.3,876.1L275.7,876.5L278.0,875.0L278.7,875.4L279.4,874.3L279.2,872.8L278.0,872.3L277.0,870.7L276.6,871.5L276.2,871.0L275.9,871.8L275.1,871.8L275.6,871.1L274.7,871.3Z", "M254.2,868.2L252.8,868.9L251.9,868.3L247.8,870.4L246.6,868.7L246.0,870.1L244.7,870.8L245.5,872.3L244.9,873.4L246.1,872.8L246.3,873.8L248.3,875.6L248.4,874.8L249.2,874.6L249.5,875.0L250.4,874.2L253.4,874.7L254.2,873.9L255.6,870.1L254.2,868.2Z", "M273.7,863.3L273.1,863.1L271.4,865.3L271.3,865.8L272.9,866.6L273.1,867.5L271.7,868.4L272.5,869.7L273.5,869.7L273.3,869.3L274.0,869.0L276.1,869.2L276.3,867.4L273.1,866.3L274.5,866.2L274.1,865.4L273.1,865.1L274.7,864.1L274.2,863.3L273.7,863.3Z", "M297.6,864.6L296.7,862.8L295.3,862.4L293.0,863.9L291.9,863.9L293.7,865.4L294.6,865.0L294.2,866.3L295.0,866.4L295.2,866.9L294.8,867.4L297.0,867.8L297.7,868.9L299.1,869.0L299.7,868.4L299.0,867.1L297.4,866.6L298.5,866.6L297.6,864.6Z", "M178.3,859.3L177.5,859.0L177.4,860.1L178.2,861.6L177.1,864.0L175.7,864.4L175.6,865.5L176.1,866.1L175.2,866.0L174.1,867.0L174.9,867.6L174.6,868.1L173.3,868.1L173.5,866.3L172.2,868.1L172.1,869.2L167.7,871.8L168.4,873.4L167.8,872.7L166.5,873.5L165.9,874.8L165.7,876.3L167.6,879.6L169.7,879.2L168.9,881.3L169.4,881.9L170.0,881.8L169.9,881.2L170.7,881.1L171.4,882.4L172.7,881.8L172.9,882.4L174.5,881.9L175.3,881.3L174.9,880.5L175.9,880.9L177.3,880.6L177.7,879.8L179.1,879.8L179.5,879.2L179.0,879.1L179.0,878.5L179.4,877.9L180.9,878.8L180.5,880.5L181.0,881.2L181.2,880.7L182.3,880.7L182.8,880.1L182.7,879.1L181.8,879.0L182.4,878.8L182.2,878.1L181.9,878.6L181.4,878.1L181.9,877.8L181.5,876.8L182.5,877.3L182.2,876.4L183.2,876.9L183.4,875.7L183.9,875.6L184.3,877.1L183.7,877.2L184.3,878.0L185.1,877.3L184.9,876.3L187.3,873.3L186.7,872.1L187.8,870.6L186.7,870.2L186.8,869.4L188.8,869.5L187.8,867.6L188.6,867.2L186.1,864.9L185.5,863.3L185.0,863.3L185.2,862.5L184.1,863.7L183.3,863.3L182.3,862.2L182.8,861.2L182.4,860.6L180.6,860.0L180.4,859.3L178.3,859.3Z", "M163.1,854.9L162.4,855.0L162.2,856.7L163.2,856.5L164.4,859.3L165.4,859.3L163.6,861.7L162.2,861.2L161.0,861.6L160.7,862.4L161.5,861.9L163.1,862.4L161.9,863.9L160.7,863.4L161.1,864.4L163.0,864.6L165.3,863.1L165.1,862.1L166.6,862.0L165.8,860.8L167.3,858.8L166.3,858.0L166.6,857.1L165.4,856.9L164.0,854.9L163.1,854.9Z", "M159.9,854.2L159.4,854.4L159.8,856.2L159.4,856.9L160.6,858.2L159.7,859.3L160.1,861.3L160.8,861.1L161.0,860.5L162.9,860.9L163.6,859.4L162.9,857.4L162.1,857.5L161.1,856.5L161.6,854.7L159.9,854.2Z", "M171.1,850.8L170.6,850.4L168.5,852.5L167.7,852.4L167.8,853.4L168.9,853.5L168.1,854.8L168.7,855.6L168.1,856.2L168.7,856.4L171.4,854.9L171.9,855.5L174.4,854.1L174.2,853.5L173.2,853.9L172.9,853.3L173.3,852.6L171.1,850.8Z", "M113.4,848.1L112.5,847.9L111.2,850.3L111.2,851.5L110.5,851.6L110.8,853.0L110.2,853.4L111.6,855.2L112.3,855.2L112.3,853.4L113.6,853.1L113.2,851.9L114.7,851.2L114.8,849.6L116.3,849.0L116.4,848.5L115.6,848.2L114.6,849.4L113.7,849.2L113.9,848.1L113.4,848.1Z", "M298.9,846.5L297.8,845.3L295.2,844.3L295.0,844.8L296.5,846.9L296.4,847.9L296.9,849.3L295.0,851.7L293.8,852.3L293.5,853.4L294.0,854.0L293.1,855.6L293.6,856.3L295.1,856.7L296.0,858.4L298.8,859.2L300.4,858.7L300.1,857.5L299.0,857.1L299.3,855.1L300.0,854.7L299.8,852.2L300.5,851.6L299.6,851.6L299.6,851.0L298.2,849.9L298.3,848.0L297.2,848.3L296.7,847.3L297.3,846.6L298.1,846.6L298.4,847.6L299.2,847.4L298.9,846.5Z", "M156.2,845.2L155.7,844.1L154.3,846.3L151.9,846.6L151.8,849.0L152.4,849.8L152.3,850.6L153.3,849.8L153.7,850.9L154.5,850.9L154.7,850.5L155.2,850.8L154.9,851.8L155.8,852.0L156.5,851.8L157.5,849.9L159.1,849.2L159.2,847.4L158.5,847.4L157.8,845.8L156.2,845.2Z", "M166.8,841.1L165.5,840.2L165.5,841.0L164.6,841.4L165.0,842.7L164.3,843.1L164.1,844.2L164.9,845.7L164.3,846.6L164.9,847.1L165.0,846.1L167.2,845.5L167.8,846.2L169.2,844.9L170.3,846.3L170.0,847.5L172.2,847.6L172.9,845.4L172.3,843.5L171.8,843.3L172.0,842.6L171.3,842.0L169.9,842.6L168.4,840.6L166.8,841.1Z", "M186.6,839.8L186.7,841.2L186.1,841.5L186.1,842.7L186.5,843.0L187.2,841.8L187.8,841.8L188.0,840.6L186.6,839.8Z", "M158.0,837.0L156.7,837.5L155.8,839.0L154.8,838.8L154.9,839.3L153.6,840.0L150.5,839.9L150.9,840.6L149.9,841.1L150.2,841.5L149.6,843.7L151.7,845.9L153.9,845.4L154.5,844.3L153.5,843.0L153.7,842.3L154.5,842.0L155.3,842.8L156.3,841.8L156.7,842.3L157.7,841.5L158.4,841.6L158.5,840.6L157.4,840.2L158.6,838.8L158.0,837.0Z", "M167.6,829.5L167.1,830.0L167.6,832.7L165.0,831.8L163.3,832.8L164.8,835.8L163.7,836.4L163.0,835.5L162.0,835.8L164.3,838.1L164.8,837.9L164.1,836.4L164.8,835.8L165.7,836.2L165.9,838.0L167.9,837.7L168.2,836.4L167.5,835.1L168.0,834.3L169.4,834.7L170.1,833.9L170.4,833.3L169.1,832.5L169.0,831.8L170.9,831.7L170.9,831.1L169.9,830.2L167.6,829.5Z", "M181.7,832.7L182.3,832.3L183.1,832.4L183.4,833.1L184.8,832.9L185.2,833.9L184.9,835.1L184.2,835.5L185.9,836.3L187.8,834.4L187.7,833.0L186.6,831.4L183.9,831.6L184.1,830.4L183.1,830.0L184.1,828.7L185.7,828.3L184.9,826.8L183.1,827.0L182.1,825.6L180.6,826.8L182.3,828.7L182.0,829.4L180.6,829.0L180.7,831.0L179.6,830.7L178.9,831.9L176.9,831.3L176.3,833.0L179.3,833.7L180.3,832.2L181.7,832.7Z", "M163.5,824.5L162.8,826.5L159.8,826.8L157.8,830.0L156.9,830.4L157.1,831.0L159.2,831.8L159.9,831.4L162.0,832.9L163.9,831.9L163.9,831.3L165.0,831.4L164.7,830.2L166.1,829.3L166.2,828.7L165.1,828.3L166.0,827.2L164.4,825.3L164.7,824.6L163.9,824.1L163.5,824.5Z", "M295.1,823.7L295.2,823.2L294.6,822.6L294.0,823.0L293.3,824.5L292.4,824.8L292.5,826.4L295.0,827.1L296.9,826.9L297.0,828.5L298.7,829.1L298.7,826.2L297.2,824.6L295.0,824.5L295.1,823.7Z", "M297.5,826.6L298.4,826.6L298.5,828.1L297.4,828.1L297.5,826.6Z", "M169.2,815.2L166.2,817.5L166.9,818.1L169.0,817.6L169.7,818.5L169.1,818.7L169.3,820.5L168.5,822.8L169.8,822.1L169.9,820.9L171.8,821.0L172.5,820.0L172.5,818.1L171.3,816.7L171.6,816.2L169.2,815.2Z", "M162.9,810.3L162.9,811.4L164.6,810.8L164.4,811.8L166.1,812.7L167.8,811.7L167.1,810.8L168.1,810.3L167.7,807.1L168.1,804.7L170.9,803.1L167.6,803.9L164.9,807.0L162.4,807.5L162.8,808.3L161.8,809.3L162.9,810.3Z", "M228.5,872.1L232.3,873.0L232.9,872.0L232.5,871.4L232.5,869.5L233.5,870.7L234.6,869.9L235.4,870.2L235.3,868.9L234.3,868.1L236.2,863.6L236.2,861.5L237.2,861.8L237.6,861.2L237.4,860.7L236.9,861.1L235.5,860.4L236.5,859.4L236.5,858.3L237.4,857.1L236.7,855.6L234.8,855.1L238.2,855.2L240.7,854.2L242.4,851.4L244.7,850.6L246.9,847.6L247.7,847.6L248.4,848.4L251.6,848.3L253.3,845.8L253.5,844.0L255.1,842.0L256.1,841.7L257.5,844.4L258.5,843.6L259.9,844.6L261.0,842.8L262.8,842.5L263.3,846.2L264.0,846.1L264.2,846.8L263.2,847.1L261.8,851.3L259.1,850.5L259.5,847.8L258.7,846.0L256.9,846.6L255.9,847.9L256.2,849.0L255.4,849.7L255.0,852.2L252.0,853.3L250.6,855.3L250.3,857.4L250.6,858.1L248.3,858.7L247.7,860.4L246.1,861.7L246.0,862.9L246.7,863.7L246.6,864.6L248.3,865.3L252.4,864.5L253.4,865.6L254.5,864.2L255.5,865.2L255.4,865.9L257.2,865.6L259.4,867.9L258.2,869.5L260.7,870.6L261.7,871.7L261.0,872.3L262.4,873.5L263.8,872.9L263.6,872.0L262.3,871.2L262.5,870.6L263.5,870.6L263.1,870.3L263.3,869.8L264.8,869.5L265.3,868.5L266.2,869.7L266.8,868.9L267.4,869.3L267.8,868.9L267.0,867.5L267.7,866.7L268.9,867.1L269.0,865.9L269.7,865.6L270.5,866.5L270.4,864.8L271.5,862.8L268.3,861.8L268.9,860.8L268.2,859.0L269.7,858.8L270.1,859.4L271.1,858.8L271.2,859.4L272.1,860.0L273.0,859.3L274.3,860.2L275.9,859.3L276.8,858.2L276.9,857.4L276.2,856.2L276.1,854.5L274.4,854.2L273.1,853.2L273.5,852.8L274.0,853.6L274.6,852.8L275.7,853.4L275.4,852.6L274.4,852.3L274.1,851.3L272.0,851.4L272.4,850.6L271.1,850.2L270.2,848.5L268.7,847.6L266.9,845.0L266.4,843.6L268.7,841.0L267.4,840.3L267.5,839.4L268.2,838.1L269.5,837.5L270.0,836.6L267.9,836.3L266.0,834.2L267.0,834.1L268.2,835.2L273.7,833.3L275.3,833.6L275.8,832.5L275.6,830.4L277.7,830.2L278.4,833.2L279.7,833.7L278.2,836.7L280.6,836.8L281.1,837.4L281.0,838.1L282.3,840.8L282.0,841.7L283.1,841.0L283.7,843.2L283.0,843.1L282.5,844.5L280.7,845.9L281.6,847.7L280.5,848.4L280.3,849.5L281.3,850.0L280.4,851.4L281.5,852.2L282.3,854.1L282.5,852.7L283.4,852.5L285.4,853.4L287.2,855.1L287.9,854.8L286.9,854.1L287.6,852.7L286.7,852.8L286.7,849.4L286.0,848.7L286.2,847.8L285.3,847.1L286.2,845.9L286.3,846.5L287.6,847.1L287.5,845.0L288.8,842.2L292.5,845.7L294.7,844.7L294.7,844.0L296.1,844.1L296.6,843.4L295.9,842.9L296.4,841.4L295.7,840.2L296.6,839.1L296.8,837.6L297.4,837.6L297.4,834.6L298.0,834.0L297.8,831.6L295.2,831.6L295.6,832.6L294.1,831.6L292.0,831.8L291.7,831.3L289.7,834.0L289.1,833.3L287.1,834.9L286.4,834.3L287.1,833.2L284.7,832.6L283.4,830.3L285.3,828.5L283.5,825.9L282.7,825.5L284.8,825.5L287.3,829.4L289.8,827.4L289.2,826.7L289.9,824.7L291.8,825.9L292.3,824.5L294.5,822.3L296.1,821.6L296.3,822.0L295.2,822.9L295.4,823.7L295.8,824.4L297.5,824.4L297.4,822.4L296.3,821.7L298.4,818.7L298.9,816.7L297.4,812.7L295.2,811.4L294.7,810.2L291.9,807.6L291.2,804.3L288.9,801.9L288.0,801.8L285.7,798.7L285.9,795.3L285.0,791.6L283.9,791.0L281.7,786.0L279.7,785.0L276.2,781.8L274.1,781.3L271.5,781.6L270.2,782.7L267.3,787.6L264.9,785.6L261.4,787.4L259.6,786.4L257.3,786.6L255.3,784.5L254.4,784.3L253.6,786.3L251.8,785.6L251.6,784.5L250.3,784.6L248.6,786.7L245.4,787.9L240.5,785.6L241.2,783.8L242.6,783.9L242.2,782.2L242.6,781.3L241.4,779.5L240.8,780.1L239.5,778.8L239.2,777.8L240.8,777.6L241.2,775.2L240.0,774.4L239.8,771.2L238.2,772.1L237.3,771.4L236.7,773.9L235.9,774.2L235.7,775.2L234.9,775.1L235.3,777.8L232.0,778.4L231.6,777.2L230.6,777.6L230.5,776.3L229.4,775.5L229.0,773.0L226.9,771.7L224.7,771.4L224.8,770.0L223.5,769.2L222.5,769.4L222.5,771.0L218.6,771.1L217.3,772.8L216.5,772.9L217.6,774.3L217.8,776.0L215.3,777.8L216.1,779.5L215.0,781.3L213.9,781.3L213.5,782.8L210.9,782.7L209.1,785.8L207.7,785.7L206.0,784.3L204.7,784.7L204.2,786.2L204.8,786.1L204.5,787.7L203.5,786.8L201.6,786.5L200.4,787.1L199.7,786.4L199.4,785.3L198.9,785.1L199.4,783.1L198.8,781.6L197.5,782.8L197.2,782.4L197.6,780.4L196.0,779.2L197.1,778.3L197.2,777.0L196.2,775.2L191.8,774.8L190.5,776.1L190.1,778.2L191.7,781.3L189.7,780.9L189.0,782.5L187.7,788.5L186.9,789.3L185.1,789.3L184.4,789.9L184.1,790.7L184.7,791.0L183.9,791.5L184.1,793.5L182.7,792.7L182.0,795.5L182.1,796.8L184.9,797.3L185.4,798.4L187.9,796.7L188.3,797.0L187.5,798.3L187.8,798.8L186.5,799.5L186.9,801.0L188.6,801.9L189.1,803.6L190.2,804.2L191.7,807.1L195.1,807.8L194.5,808.8L192.9,809.1L194.4,810.2L193.5,811.9L191.8,813.0L191.4,813.8L192.0,814.8L190.2,815.1L190.0,813.6L189.2,813.5L190.7,811.5L190.3,810.7L189.6,810.2L189.2,811.3L188.8,811.2L188.6,810.0L187.7,811.6L187.2,811.3L187.1,810.3L185.6,810.1L186.1,808.3L184.6,808.3L184.9,807.5L184.4,807.0L185.8,803.9L185.7,801.8L184.8,802.9L184.3,802.7L184.5,803.5L183.7,805.0L182.7,805.0L182.8,804.1L180.6,804.3L180.0,803.2L179.3,803.2L177.7,806.6L179.0,807.3L178.2,808.1L175.6,807.1L175.0,807.5L173.5,806.5L171.0,807.9L170.9,808.7L171.5,809.5L171.2,811.1L172.7,811.2L172.9,812.0L174.2,811.5L174.7,812.2L176.8,812.5L176.4,815.8L176.8,816.1L177.7,815.1L178.0,816.4L178.6,816.5L180.1,814.3L179.0,812.4L180.0,812.4L181.0,811.6L182.5,813.2L183.2,812.3L182.2,811.8L183.4,810.7L183.0,810.2L183.5,809.0L184.7,809.0L185.6,810.7L185.1,811.7L186.2,812.5L185.8,812.8L186.2,813.8L188.5,812.9L189.2,815.3L185.3,818.0L186.8,819.1L184.2,821.1L183.5,819.6L182.5,819.3L181.7,821.2L183.7,823.4L182.5,824.5L183.0,825.1L184.2,824.7L184.4,826.1L185.5,826.3L186.3,825.5L187.4,825.7L187.3,824.5L187.9,823.6L187.3,823.5L187.9,822.0L186.8,821.0L187.6,820.3L187.4,818.2L187.9,817.9L188.4,819.0L188.3,820.6L189.5,821.6L189.0,823.0L189.3,824.2L189.8,824.2L189.3,825.6L190.3,826.3L189.3,829.5L190.1,829.7L189.6,831.0L190.9,833.5L189.0,834.1L186.0,838.1L187.9,839.8L190.1,839.4L193.2,837.8L193.8,839.5L188.5,840.9L188.4,842.5L187.3,842.7L186.9,843.5L189.1,844.6L187.0,848.3L186.4,848.4L185.8,847.7L185.9,846.7L184.5,845.7L184.6,843.7L183.6,842.8L182.7,842.9L182.9,842.4L182.0,841.5L181.2,841.7L180.1,845.0L180.5,845.6L179.9,847.4L178.9,847.6L179.0,849.3L178.6,849.8L179.0,850.7L178.6,851.0L179.4,852.8L179.0,853.6L180.4,854.7L181.3,854.2L181.6,854.7L180.6,856.4L179.8,856.2L179.1,856.8L180.5,856.5L181.1,857.1L180.5,858.2L183.1,858.9L182.6,860.3L183.2,860.9L184.8,860.4L187.1,861.6L188.4,861.4L189.1,862.4L188.3,863.8L188.9,864.4L190.2,863.8L190.0,863.1L191.3,863.0L191.5,862.2L192.2,862.2L192.6,863.3L194.4,864.2L193.3,865.5L194.8,865.6L195.6,867.0L194.4,867.5L195.2,869.2L194.3,870.0L195.6,870.8L195.3,872.0L196.1,872.7L195.3,872.9L195.0,872.3L194.4,872.9L195.9,874.7L196.6,874.2L197.6,874.5L198.3,873.6L198.9,874.4L198.5,874.8L199.1,876.2L198.2,877.1L197.3,876.8L197.0,878.0L197.5,879.2L196.5,878.9L195.8,879.7L196.3,881.8L195.9,882.1L195.4,881.3L195.1,881.8L196.2,882.4L197.1,881.7L197.7,882.0L198.3,881.1L199.2,881.4L199.9,884.2L198.8,885.7L199.3,886.3L199.1,888.0L199.7,888.4L200.1,887.6L201.3,887.3L202.4,885.5L204.7,885.7L205.6,886.4L205.7,884.0L206.4,883.5L205.8,882.8L207.3,881.8L207.3,879.8L206.5,879.1L207.4,878.4L206.9,877.5L207.4,877.0L207.8,877.5L208.5,876.5L209.0,876.7L209.8,875.3L210.2,875.6L210.7,875.0L211.8,875.6L211.4,875.0L215.8,872.9L217.4,870.3L216.7,868.9L218.1,868.6L218.1,865.1L218.7,864.7L219.2,857.4L219.8,857.2L220.9,861.2L220.3,866.4L221.2,869.7L220.4,870.0L220.3,870.8L222.0,871.0L221.8,872.1L222.6,872.7L224.9,872.6L227.7,874.6L228.2,874.3L226.9,872.1L228.5,872.1Z", "M196.1,843.8L194.9,846.8L189.0,845.1L189.6,843.7L190.2,843.9L190.3,844.6L191.8,844.9L191.5,844.0L191.9,843.3L193.1,843.9L193.7,843.3L194.4,844.9L195.0,844.0L196.1,843.8Z", "M222.1,812.5L221.0,811.7L219.0,812.4L218.0,810.9L219.1,810.8L218.4,808.7L216.4,807.0L213.7,806.6L211.1,807.3L211.1,806.7L209.7,805.7L210.0,804.1L209.4,803.4L209.9,801.4L211.3,800.5L209.9,798.5L211.8,798.4L212.5,796.3L213.7,797.0L214.9,796.6L216.4,792.6L218.3,791.9L218.5,792.5L217.8,794.1L221.0,795.8L223.3,795.1L223.4,794.6L224.3,794.8L227.4,792.8L228.2,793.2L230.4,792.0L231.6,792.6L231.8,793.6L233.0,794.7L233.2,796.2L234.4,797.5L233.8,798.5L234.6,799.7L237.1,798.9L238.8,800.5L237.7,802.2L238.0,805.0L236.0,807.2L236.1,808.4L234.5,808.8L233.3,810.5L232.1,810.3L230.9,808.6L228.6,810.0L225.8,809.9L224.8,811.2L222.1,812.5Z"], "lx": 225.3, "ly": 832.7, "north": false}]};
+
+// 종별 순차 색상 팔레트 (구분 잘 되는 16색, 순환)
+const PALETTE = ["#e6194b","#3cb44b","#4363d8","#f58231","#911eb4","#008080",
+  "#e6ab02","#9a6324","#800000","#469990","#f032e6","#000075",
+  "#a9a900","#808000","#e07b39","#5c5c8a"];
+
+// 빗금 방향 4종 순환 (0:왼쪽빗금 ╱, 1:오른쪽빗금 ╲, 2:가로 ═, 3:세로 ‖)
+const HATCH_DIRS = ['left','right','horiz','vert'];
+const HATCH_LABEL = {left:'왼쪽 빗금', right:'오른쪽 빗금', horiz:'가로 빗금', vert:'세로 빗금'};
+
+// 지역 목록: 남한 16개 시도, 북한 11개 도와 시
+const SOUTH_REGIONS = MAP.provinces.filter(p=>!p.north).map(p=>p.short);
+const NORTH_REGIONS = MAP.provinces.filter(p=>p.north).map(p=>p.short);
+const REGIONS = [...SOUTH_REGIONS, ...NORTH_REGIONS];
+const CENTER = {}; MAP.provinces.forEach(p=>{ CENTER[p.short]={x:p.lx,y:p.ly}; });
+// 지역명 → 폴리곤 path(d) 배열
+const REGION_PATHS = {}; MAP.provinces.forEach(p=>{ REGION_PATHS[p.short]=p.paths; });
+
+let picked = null;
+let pickedRegions = new Set();
+let currentDraws = [];      // 현재 편집 중인 종의 그린 선들 [[{x,y}...], ...]
+let currentAreas = [];      // 현재 편집 중인 종의 칠한 영역들 [[{x,y}...], ...]
+let curPath = null;         // 그리는 중인 선 또는 영역
+let drawing = false;
+let mode = 'region';
+let drawTool = 'area';      // 'area' 영역 칠하기 | 'line' 선 그리기
+let entries = [];           // {name,sci,taxon,grade,regions:[], draws:[[{x,y}]], areas:[[{x,y}]], color, hatch}
+let colorIdx = 0;
+
+// 한 방향 빗금 pattern 정의 SVG 생성
+function hatchPatternDef(id, color, dir){
+  const size=8;
+  let lines='';
+  if(dir==='left')  lines=`<path d="M0,${size} l${size},-${size}" stroke="${color}" stroke-width="2"/>`;      // ╱
+  else if(dir==='right') lines=`<path d="M0,0 l${size},${size}" stroke="${color}" stroke-width="2"/>`;         // ╲
+  else if(dir==='horiz') lines=`<path d="M0,${size/2} l${size},0" stroke="${color}" stroke-width="2"/>`;       // ═
+  else if(dir==='vert')  lines=`<path d="M${size/2},0 l0,${size}" stroke="${color}" stroke-width="2"/>`;       // ‖
+  return `<pattern id="${id}" patternUnits="userSpaceOnUse" width="${size}" height="${size}">${lines}</pattern>`;
+}
+
+// ---------- 지도 렌더 ----------
+const stage = document.getElementById('stage');
+const svgEl = ()=>document.getElementById('map');
+function buildMap(){
+  let s = `<svg id="map" viewBox="0 0 ${MAP.width} ${MAP.height}" xmlns="http://www.w3.org/2000/svg">`;
+  s += `<defs id="hatch-defs"></defs>`;
+  s += `<rect id="map-bg" x="0" y="0" width="${MAP.width}" height="${MAP.height}" fill="#f4f6f4"/>`;
+  s += `<g id="provs">`;
+  MAP.provinces.forEach(p=>{
+    p.paths.forEach(d=>{ s += `<path class="prov${p.north?' prov-n':''}" data-r="${p.short}" d="${d}"><title>${p.short}</title></path>`; });
+  });
+  s += `</g><defs id="cur-defs"></defs><g id="fills"></g><g id="pending"></g><g id="plabels">`;
+  MAP.provinces.forEach(p=>{
+    s += `<text class="plabel" x="${p.lx}" y="${p.ly}">${p.short}</text>`;
+    (p.extraLabels||[]).forEach(t=>{ s += `<text class="plabel plabel-sm" x="${t.x}" y="${t.y}">${t.text}</text>`; });
+  });
+  s += `</g><g id="draws"></g></svg>`;
+  const overlay = document.getElementById('draw-overlay');
+  stage.innerHTML = s;
+  stage.appendChild(overlay);
+  attachDrawEvents();
+}
+buildMap();
+
+// ---------- 좌표 변환 ----------
+function toSvgXY(evt){
+  const svg = svgEl();
+  const pt = svg.createSVGPoint();
+  const t = evt.touches ? evt.touches[0] : evt;
+  pt.x = t.clientX; pt.y = t.clientY;
+  const ctm = svg.getScreenCTM().inverse();
+  const p = pt.matrixTransform(ctm);
+  return {x:Math.round(p.x*10)/10, y:Math.round(p.y*10)/10};
+}
+
+// ---------- 그리기 이벤트 ----------
+function attachDrawEvents(){
+  const svg = svgEl();
+  const start = e=>{
+    if(mode!=='draw' || !picked) return;
+    e.preventDefault(); drawing=true;
+    curPath=[toSvgXY(e)]; renderDrawsLive();
+  };
+  const move = e=>{
+    if(!drawing) return; e.preventDefault();
+    curPath.push(toSvgXY(e)); renderDrawsLive();
+  };
+  const end = e=>{
+    if(!drawing) return; drawing=false;
+    if(drawTool==='area'){
+      if(curPath && curPath.length>2 && polyArea(curPath)>30) currentAreas.push(curPath);
+      else if(curPath) showMsg('warn','영역이 너무 작아요. 서식지를 따라 동그랗게 크게 그려 주세요.');
+    } else if(curPath && curPath.length>1) currentDraws.push(curPath);
+    curPath=null; renderDrawsLive(); updateDrawStatus(); updateAddBtn();
+  };
+  // 지역 선택 모드에서는 지도를 눌러 지역을 고르고 끔
+  svg.addEventListener('click', e=>{
+    if(mode!=='region') return;
+    const t = e.target.closest ? e.target.closest('.prov') : null;
+    if(!t) return;
+    if(!picked){ showMsg('warn','먼저 왼쪽에서 종 이름을 검색해 골라 주세요. 그다음 지도를 누르면 지역이 선택됩니다.'); return; }
+    toggleRegion(t.dataset.r);
+  });
+  svg.addEventListener('mousedown',start);
+  svg.addEventListener('mousemove',move);
+  window.addEventListener('mouseup',end);
+  svg.addEventListener('touchstart',start,{passive:false});
+  svg.addEventListener('touchmove',move,{passive:false});
+  svg.addEventListener('touchend',end);
+}
+function pathD(pts){
+  if(!pts.length) return '';
+  return 'M'+pts.map(p=>`${p.x},${p.y}`).join('L');
+}
+function polyArea(pts){
+  let a=0; for(let i=0;i<pts.length;i++){ const p=pts[i], q2=pts[(i+1)%pts.length]; a+=p.x*q2.y-q2.x*p.y; }
+  return Math.abs(a/2);
+}
+// 지금 고르고 있는 종의 색과 빗금 (이미 추가한 종이면 그 종의 것)
+function currentStyle(){
+  const ex = picked && entries.find(e=>e.name===picked.name);
+  if(ex) return {color:ex.color, hatch:ex.hatch};
+  return {color:PALETTE[colorIdx%PALETTE.length], hatch:HATCH_DIRS[colorIdx%HATCH_DIRS.length]};
+}
+// 그린 선과 칠한 영역 (확정된 종 + 지금 편집 중인 종)
+function renderDrawsLive(){
+  const g=document.getElementById('draws');
+  const st = currentStyle();
+  document.getElementById('cur-defs').innerHTML = hatchPatternDef('hatch-cur', st.color, st.hatch);
+  let out='';
+  entries.forEach((e,i)=>{ (e.areas||[]).forEach(a=>{
+    out += `<path class="drawarea" d="${pathD(a)}Z" fill="url(#hatch-${i})" stroke="${e.color}"/>`;
+  }); });
+  currentAreas.forEach(a=>{ out += `<path class="drawarea cur" d="${pathD(a)}Z" fill="url(#hatch-cur)" stroke="${st.color}" stroke-dasharray="6,4"/>`; });
+  entries.forEach(e=>{ (e.draws||[]).forEach(line=>{
+    out += `<path class="drawline" d="${pathD(line)}" stroke="${e.color}"/>`;
+  }); });
+  currentDraws.forEach(line=>{ out += `<path class="drawline cur" d="${pathD(line)}" stroke="${st.color}"/>`; });
+  if(curPath){
+    out += drawTool==='area'
+      ? `<path class="drawarea cur" d="${pathD(curPath)}Z" fill="url(#hatch-cur)" stroke="${st.color}" stroke-dasharray="5,4"/>`
+      : `<path class="drawline cur" d="${pathD(curPath)}" stroke="${st.color}" stroke-dasharray="5,4"/>`;
+  }
+  g.innerHTML = out;
+}
+// 아직 추가 전, 고른 지역 미리보기
+function renderPending(){
+  let out='';
+  pickedRegions.forEach(r=>{ (REGION_PATHS[r]||[]).forEach(d=>{
+    out += `<path class="pending-fill" d="${d}" fill="url(#hatch-cur)"/>`;
+  }); });
+  document.getElementById('pending').innerHTML = out;
+}
+function updateDrawStatus(){
+  document.getElementById('draw-status').textContent =
+    `칠한 영역 ${currentAreas.length}곳, 그린 선 ${currentDraws.length}개`;
+}
+
+// ---------- 지역 빗금 채우기 (확정 종들) ----------
+function drawAll(){
+  const provs=document.querySelectorAll('.prov'); provs.forEach(p=>p.classList.remove('lit'));
+
+  // 1) 종마다 패턴 정의 생성
+  let defs='';
+  entries.forEach((e,i)=>{
+    defs += hatchPatternDef('hatch-'+i, e.color, e.hatch);
+  });
+  document.getElementById('hatch-defs').innerHTML = defs;
+
+  // 2) 지역별로, 그 지역에 사는 각 종의 빗금을 겹쳐 그림
+  const byRegion={};
+  entries.forEach((e,idx)=>{ (e.regions||[]).forEach(r=>{ (byRegion[r]=byRegion[r]||[]).push(idx); }); });
+  let fills='';
+  Object.keys(byRegion).forEach(r=>{
+    const paths=REGION_PATHS[r]; if(!paths) return;
+    document.querySelectorAll(`.prov[data-r="${r}"]`).forEach(pp=>pp.classList.add('lit'));
+    byRegion[r].forEach(idx=>{
+      const e=entries[idx];
+      paths.forEach(d=>{
+        fills += `<path d="${d}" fill="url(#hatch-${idx})" stroke="none" opacity="0.85"><title>${e.name} · ${r}</title></path>`;
+      });
+    });
+  });
+  document.getElementById('fills').innerHTML = fills;
+  renderDrawsLive(); // 선도 다시 그림
+}
+
+// ---------- 범례 (종 이름 + 빗금 견본) ----------
+function hatchSwatch(color, dir, id){
+  // 14x14 견본
+  return `<svg width="15" height="15" viewBox="0 0 15 15" style="flex:none;vertical-align:middle;border:1px solid #d8e0dc;border-radius:3px;">
+    <defs>${hatchPatternDef(id, color, dir)}</defs>
+    <rect x="0" y="0" width="15" height="15" fill="#fff"/>
+    <rect x="0" y="0" width="15" height="15" fill="url(#${id})"/></svg>`;
+}
+function renderLegend(){
+  const wrap=document.getElementById('legend');
+  if(entries.length===0){ wrap.innerHTML='<span class="empty-lg">아직 없음</span>'; return; }
+  wrap.innerHTML = entries.map((e,i)=>
+    `<span class="lg">${hatchSwatch(e.color, e.hatch, 'lg-hatch-'+i)}${e.name}</span>`).join('');
+}
+
+// ---------- 자동완성 ----------
+const q=document.getElementById('q'), sugBox=document.getElementById('sug');
+let activeIdx=-1, matches=[];
+function search(term){
+  term=term.trim(); if(!term) return [];
+  return SPECIES.filter(s=> s.name.includes(term) || (s.sci&&s.sci.toLowerCase().includes(term.toLowerCase()))).slice(0,40);
+}
+function showSug(){
+  matches=search(q.value); activeIdx=-1;
+  if(!q.value.trim()){ sugBox.classList.remove('show'); return; }
+  if(matches.length===0){
+    sugBox.innerHTML=`<div class="sug"><span class="none">‘${q.value.trim()}’ — 목록에 없는 종이에요. 이름을 다시 확인해 주세요.</span></div>`;
+    sugBox.classList.add('show'); return;
+  }
+  sugBox.innerHTML=matches.map((s,i)=>`<div class="sug" data-i="${i}"><span class="nm">${s.name}</span><span class="tx">${s.taxon} · ${s.grade}급</span></div>`).join('');
+  sugBox.classList.add('show');
+  sugBox.querySelectorAll('.sug[data-i]').forEach(el=>{
+    el.addEventListener('mousedown',ev=>{ev.preventDefault(); choose(matches[+el.dataset.i]);});
+  });
+}
+q.addEventListener('input',showSug);
+q.addEventListener('focus',()=>{ if(q.value.trim()) showSug(); });
+q.addEventListener('keydown',e=>{
+  if(!sugBox.classList.contains('show')||matches.length===0) return;
+  if(e.key==='ArrowDown'){e.preventDefault();activeIdx=Math.min(activeIdx+1,matches.length-1);paintActive();}
+  else if(e.key==='ArrowUp'){e.preventDefault();activeIdx=Math.max(activeIdx-1,0);paintActive();}
+  else if(e.key==='Enter'){e.preventDefault(); if(activeIdx>=0) choose(matches[activeIdx]);}
+  else if(e.key==='Escape'){sugBox.classList.remove('show');}
+});
+function paintActive(){ sugBox.querySelectorAll('.sug').forEach((el,i)=>el.classList.toggle('active',i===activeIdx)); }
+document.addEventListener('click',e=>{ if(!e.target.closest('.ac')) sugBox.classList.remove('show'); });
+
+// ---------- 종 선택 ----------
+function choose(sp){
+  picked=sp; pickedRegions=new Set(); currentDraws=[]; currentAreas=[]; curPath=null;
+  q.value=sp.name; sugBox.classList.remove('show');
+  document.getElementById('p-name').textContent=sp.name;
+  document.getElementById('p-sci').textContent=sp.sci||'';
+  document.getElementById('p-taxon').textContent=sp.taxon;
+  const g=document.getElementById('p-grade'); g.className='grade '+sp.grade; g.textContent=sp.grade+'급';
+  document.getElementById('picked').classList.add('show');
+  buildChips();
+  document.getElementById('region-box').classList.add('show');
+  document.getElementById('add-guide').classList.add('show');
+  setMode('region');
+  updateDrawStatus(); updateAddBtn(); clearMsg(); renderDrawsLive(); renderPending();
+}
+function buildChips(){
+  const chip = r=>`<span class="chip" data-r="${r}">${r}</span>`;
+  const wrap=document.getElementById('chips');
+  wrap.innerHTML =
+    `<div class="chip-group"><div class="chip-h">남한</div><div class="chips-row">${SOUTH_REGIONS.map(chip).join('')}</div></div>`+
+    `<div class="chip-group"><div class="chip-h">북한</div><div class="chips-row">${NORTH_REGIONS.map(chip).join('')}</div></div>`;
+  wrap.querySelectorAll('.chip').forEach(ch=>{
+    ch.addEventListener('click',()=>toggleRegion(ch.dataset.r));
+  });
+}
+function toggleRegion(r){
+  if(!REGIONS.includes(r)) return;
+  if(pickedRegions.has(r)) pickedRegions.delete(r); else pickedRegions.add(r);
+  syncChips(); updateAddBtn(); renderPending();
+}
+function updateAddBtn(){
+  document.getElementById('add').disabled = !(picked && (pickedRegions.size>0 || currentDraws.length>0 || currentAreas.length>0));
+}
+// 칩 on/off 상태를 pickedRegions에 맞춰 갱신
+function syncChips(){
+  document.querySelectorAll('#chips .chip').forEach(ch=>{
+    ch.classList.toggle('on', pickedRegions.has(ch.dataset.r));
+  });
+}
+document.getElementById('select-all').addEventListener('click',()=>{
+  if(!picked) return;
+  SOUTH_REGIONS.forEach(r=>pickedRegions.add(r));
+  syncChips(); updateAddBtn(); renderPending();
+});
+document.getElementById('select-north').addEventListener('click',()=>{
+  if(!picked) return;
+  NORTH_REGIONS.forEach(r=>pickedRegions.add(r));
+  syncChips(); updateAddBtn(); renderPending();
+});
+document.getElementById('clear-all').addEventListener('click',()=>{
+  if(!picked) return;
+  pickedRegions.clear(); syncChips(); updateAddBtn(); renderPending();
+});
+document.getElementById('go-draw').addEventListener('click',()=>{ if(picked){ setDrawTool('area'); setMode('draw'); } });
+
+// ---------- 모드 전환 ----------
+function setMode(m){
+  mode=m;
+  document.getElementById('tab-region').classList.toggle('on',m==='region');
+  document.getElementById('tab-draw').classList.toggle('on',m==='draw');
+  document.getElementById('region-mode').style.display = m==='region'?'block':'none';
+  document.getElementById('draw-mode').classList.toggle('show',m==='draw');
+  svgEl().classList.toggle('drawing',m==='draw');
+  svgEl().classList.toggle('selecting',m==='region' && !!picked);
+  document.getElementById('draw-overlay').classList.toggle('show',m==='draw' && !!picked);
+}
+function setDrawTool(t){
+  drawTool=t;
+  document.getElementById('tool-area').classList.toggle('on',t==='area');
+  document.getElementById('tool-line').classList.toggle('on',t==='line');
+  document.getElementById('tool-hint').innerHTML = t==='area'
+    ? '서식지가 <b>도의 일부</b>일 때 씁니다. 지도 위에서 서식지를 따라 <b>동그랗게</b> 그리면 안쪽이 이 종의 빗금으로 칠해져요. 여러 곳을 칠할 수 있어요.'
+    : '<b>강이나 하천</b>을 따라 사는 종일 때 씁니다. 지도 위에서 물줄기를 따라 선을 그어 주세요.';
+  document.getElementById('draw-overlay').textContent = t==='area'
+    ? '영역 칠하기: 서식지를 따라 동그랗게 그려 주세요'
+    : '선 그리기: 강을 따라 그어 주세요';
+}
+document.getElementById('tool-area').addEventListener('click',()=>setDrawTool('area'));
+document.getElementById('tool-line').addEventListener('click',()=>setDrawTool('line'));
+setDrawTool('area');
+document.getElementById('tab-region').addEventListener('click',()=>{ if(picked) setMode('region'); });
+document.getElementById('tab-draw').addEventListener('click',()=>{ if(picked) setMode('draw'); });
+// 마지막에 그린 것 지우기 (영역 칠하기 중이면 영역, 선 그리기 중이면 선부터)
+document.getElementById('undo-draw').addEventListener('click',()=>{
+  if(currentAreas.length && (drawTool==='area' || !currentDraws.length)) currentAreas.pop();
+  else currentDraws.pop();
+  renderDrawsLive(); updateDrawStatus(); updateAddBtn();
+});
+document.getElementById('clear-draw').addEventListener('click',()=>{ currentDraws=[]; currentAreas=[]; renderDrawsLive(); updateDrawStatus(); updateAddBtn(); });
+
+// ---------- 메시지 ----------
+const msg=document.getElementById('msg');
+function showMsg(t,x){ msg.className='msg show '+t; msg.textContent=x; }
+function clearMsg(){ msg.className='msg'; msg.textContent=''; }
+
+// ---------- 추가 ----------
+document.getElementById('add').addEventListener('click',()=>{
+  if(!picked || (pickedRegions.size===0 && currentDraws.length===0 && currentAreas.length===0)) return;
+  const regions=[...pickedRegions];
+  const draws=currentDraws.map(l=>l.slice());
+  const areas=currentAreas.map(l=>l.slice());
+  const exist=entries.find(e=>e.name===picked.name);
+  if(exist){
+    exist.regions=[...new Set([...(exist.regions||[]),...regions])];
+    exist.draws=[...(exist.draws||[]),...draws];
+    exist.areas=[...(exist.areas||[]),...areas];
+    showMsg('ok',`${picked.name}의 서식지를 업데이트했습니다.`);
+  }else{
+    entries.push({name:picked.name,sci:picked.sci,taxon:picked.taxon,grade:picked.grade,
+      regions,draws,areas,color:PALETTE[colorIdx%PALETTE.length],hatch:HATCH_DIRS[colorIdx%HATCH_DIRS.length]});
+    colorIdx++;
+    showMsg('ok',`${picked.name}을(를) 지도에 추가했습니다.`);
+  }
+  // 초기화
+  picked=null; pickedRegions=new Set(); currentDraws=[]; currentAreas=[]; curPath=null; q.value=''; renderPending();
+  document.getElementById('picked').classList.remove('show');
+  document.getElementById('region-box').classList.remove('show'); document.getElementById('add-guide').classList.remove('show');
+  setMode('region');
+  refresh(); updateAddBtn();
+});
+document.getElementById('reset').addEventListener('click',()=>{
+  if(entries.length && !confirm('표시한 종을 모두 지울까요?')) return;
+  entries=[]; colorIdx=0; picked=null; pickedRegions=new Set(); currentDraws=[]; currentAreas=[]; curPath=null; q.value=''; renderPending();
+  document.getElementById('picked').classList.remove('show');
+  document.getElementById('region-box').classList.remove('show'); document.getElementById('add-guide').classList.remove('show');
+  setMode('region'); clearMsg(); updateAddBtn(); refresh();
+});
+
+// ---------- 목록 ----------
+// 서식지 문구: 남한 16개 지역을 모두 고르면 "남한 전체"로 줄여 표시
+function regionText(regions){
+  const set = new Set(regions);
+  const part = (list, allName)=> list.every(r=>set.has(r)) ? [allName] : list.filter(r=>set.has(r));
+  return [...part(SOUTH_REGIONS,'남한 전체'), ...part(NORTH_REGIONS,'북한 전체')].join(', ');
+}
+// 서식지 전체 문구: 지역 + 칠한 영역 + 그린 선
+function habitatText(e){
+  const seg=[];
+  if(e.regions&&e.regions.length) seg.push(regionText(e.regions));
+  if(e.areas&&e.areas.length) seg.push(`칠한 영역 ${e.areas.length}곳`);
+  if(e.draws&&e.draws.length) seg.push(`그린 선 ${e.draws.length}개`);
+  return seg.join(' / ') || '-';
+}
+function renderTable(){
+  const tbody=document.getElementById('tbody'), table=document.getElementById('table'), empty=document.getElementById('empty');
+  document.getElementById('count').textContent=entries.length+'종';
+  if(entries.length===0){ tbody.innerHTML=''; table.style.display='none'; empty.style.display='block'; return; }
+  table.style.display='table'; empty.style.display='none';
+  tbody.innerHTML=entries.map((e,i)=>{
+    return `<tr>
+      <td>${hatchSwatch(e.color, e.hatch, 'tb-hatch-'+i)} ${e.name}</td>
+      <td>${e.taxon}</td>
+      <td><span class="grade ${e.grade}">${e.grade}급</span></td>
+      <td class="rlist">${habitatText(e)}</td>
+      <td style="text-align:right;"><button class="del" data-i="${i}">삭제</button></td>
+    </tr>`;
+  }).join('');
+  tbody.querySelectorAll('.del').forEach(b=>b.addEventListener('click',()=>{ entries.splice(+b.dataset.i,1); refresh(); }));
+}
+// ---------- 자동 저장 (새로고침해도 유지) ----------
+const STORE_KEY = 'endangered-species-map:v1';
+const stuNoEl = document.getElementById('stu-no');
+const stuNameEl = document.getElementById('stu-name');
+const saveStatusEl = document.getElementById('save-status');
+const SPECIES_BY_NAME = {}; SPECIES.forEach(s=>{ SPECIES_BY_NAME[s.name]=s; });
+const pad2 = n=>String(n).padStart(2,'0');
+
+function snapshot(){
+  return {app:'endangered-species-map', v:1, stuNo:stuNoEl.value, stuName:stuNameEl.value,
+          entries, colorIdx, savedAt:new Date().toISOString()};
+}
+function setSaveStatus(text, warn){
+  saveStatusEl.textContent = text; saveStatusEl.classList.toggle('warn', !!warn);
+}
+function saveState(){
+  try{
+    localStorage.setItem(STORE_KEY, JSON.stringify(snapshot()));
+    const t = new Date();
+    setSaveStatus(`자동 저장됨 ${pad2(t.getHours())}:${pad2(t.getMinutes())}`);
+  }catch(err){
+    setSaveStatus('이 브라우저에서는 자동 저장이 되지 않아요. 작업 파일 내려받기로 보관하세요.', true);
+  }
+}
+// 저장된 내용 검사: 목록에 있는 종만, 알려진 지역만 받아들임
+function sanitizeEntries(arr){
+  if(!Array.isArray(arr)) return [];
+  const seen = new Set();
+  return arr.filter(e=>e && SPECIES_BY_NAME[e.name] && !seen.has(e.name) && seen.add(e.name)).map((e,i)=>{
+    const sp = SPECIES_BY_NAME[e.name];
+    const cleanPts = (list, min)=> Array.isArray(list) ? list
+      .map(l=>Array.isArray(l) ? l.filter(p=>p && isFinite(p.x) && isFinite(p.y)).map(p=>({x:+p.x, y:+p.y})) : [])
+      .filter(l=>l.length>=min) : [];
+    // 이전 버전의 '북한'(하나로 된 지역)은 북한 도 전체로 바꿈
+    const rawRegions = Array.isArray(e.regions) ? e.regions.flatMap(r=> r==='북한' ? NORTH_REGIONS : [r]) : [];
+    return {name:sp.name, sci:sp.sci, taxon:sp.taxon, grade:sp.grade,
+      regions: [...new Set(rawRegions.filter(r=>REGIONS.includes(r)))],
+      draws: cleanPts(e.draws, 2),
+      areas: cleanPts(e.areas, 3),
+      color: /^#[0-9a-fA-F]{6}$/.test(e.color) ? e.color : PALETTE[i%PALETTE.length],
+      hatch: HATCH_DIRS.includes(e.hatch) ? e.hatch : HATCH_DIRS[i%HATCH_DIRS.length]};
+  });
+}
+function applyState(d){
+  stuNoEl.value = String(d.stuNo||'').slice(0,30);
+  stuNameEl.value = String(d.stuName||'').slice(0,30);
+  entries = sanitizeEntries(d.entries);
+  colorIdx = Math.max(parseInt(d.colorIdx,10)||0, entries.length);
+}
+function loadState(){
+  let d = null;
+  try{ const raw = localStorage.getItem(STORE_KEY); if(raw) d = JSON.parse(raw); }catch(err){ d = null; }
+  if(!d) return;
+  applyState(d);
+  if(entries.length || stuNameEl.value || stuNoEl.value){
+    const who = [stuNoEl.value, stuNameEl.value].filter(Boolean).join(' ');
+    document.getElementById('restore-text').textContent =
+      `이전에 하던 작업을 불러왔어요${who ? ` (${who}, ${entries.length}종)` : ` (${entries.length}종)`}.`;
+    document.getElementById('restore-banner').classList.add('show');
+  }
+}
+function hideBanner(){ document.getElementById('restore-banner').classList.remove('show'); }
+document.getElementById('keep-work').addEventListener('click', hideBanner);
+document.getElementById('start-new').addEventListener('click', ()=>{
+  if(!confirm('이전 작업(학번, 이름, 표시한 종)을 모두 지우고 새로 시작할까요?')) return;
+  entries=[]; colorIdx=0; stuNoEl.value=''; stuNameEl.value='';
+  try{ localStorage.removeItem(STORE_KEY); }catch(err){}
+  hideBanner(); clearMsg(); refresh();
+});
+stuNoEl.addEventListener('input', saveState);
+stuNameEl.addEventListener('input', saveState);
+
+// 작업 파일 내려받기 / 불러오기 (다른 컴퓨터에서 이어 하기)
+document.getElementById('export-work').addEventListener('click', ()=>{
+  const who = [stuNoEl.value.trim(), stuNameEl.value.trim()].filter(Boolean).join('_').replace(/[\\/:*?"<>|\s]+/g,'_');
+  const blob = new Blob([JSON.stringify(snapshot(), null, 1)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (who ? who+'_' : '') + '멸종위기지도_작업파일.json';
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+});
+const importFileEl = document.getElementById('import-file');
+document.getElementById('import-work').addEventListener('click', ()=>importFileEl.click());
+importFileEl.addEventListener('change', ()=>{
+  const f = importFileEl.files && importFileEl.files[0];
+  importFileEl.value = '';
+  if(!f) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    let d;
+    try{ d = JSON.parse(reader.result); }catch(err){ d = null; }
+    if(!d || d.app!=='endangered-species-map' || !Array.isArray(d.entries)){
+      setSaveStatus('이 파일은 멸종위기 지도 작업 파일이 아니에요. 내려받았던 .json 파일을 골라 주세요.', true);
+      return;
+    }
+    if(entries.length && !confirm('지금 지도에 있는 내용이 불러온 파일 내용으로 바뀝니다. 계속할까요?')) return;
+    applyState(d); hideBanner(); clearMsg(); refresh();
+    setSaveStatus(`작업 파일을 불러왔어요 (${entries.length}종).`);
+  };
+  reader.readAsText(f);
+});
+
+function refresh(){ drawAll(); renderLegend(); renderTable(); saveState(); }
+loadState();
+refresh();
+
+// ---------- 이미지 저장 (지도 + 범례 + 목록 표를 한 장에) ----------
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+// 저장 직후 안내창: 리로스쿨에는 이 파일을 올리도록
+const saveModal = document.getElementById('save-modal');
+function showSaveModal(fname){
+  document.getElementById('sm-file').textContent = fname;
+  saveModal.classList.add('show');
+  document.getElementById('sm-ok').focus();
+}
+document.getElementById('sm-ok').addEventListener('click', ()=>saveModal.classList.remove('show'));
+saveModal.addEventListener('click', e=>{ if(e.target===saveModal) saveModal.classList.remove('show'); });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') saveModal.classList.remove('show'); });
+
+document.getElementById('save').addEventListener('click',()=>{
+  const no=(document.getElementById('stu-no').value||'').trim();
+  const nm=(document.getElementById('stu-name').value||'').trim();
+  const label=[no,nm].filter(Boolean).join(' ');
+
+  const FONT="'Pretendard','Apple SD Gothic Neo','Malgun Gothic',sans-serif";
+  const W = MAP.width;                 // 도화지 가로폭
+  const PAD = 24;
+  const headerH = label ? 46 : 20;     // 상단 학번·이름 영역
+  const titleH = 30;                   // "서식지 분포 지도" 제목
+  const mapH = MAP.height;             // 지도 높이
+
+  // ----- 지도 SVG 마크업 만들기 -----
+  const svg=svgEl();
+  const clone=svg.cloneNode(true);
+  clone.querySelectorAll('.prov').forEach(p=>{
+    const lit=p.classList.contains('lit'), north=p.classList.contains('prov-n');
+    p.setAttribute('fill', north ? (lit?'#dde6ef':'#e8edf3') : (lit?'#dcece4':'#eaf0ed'));
+    p.setAttribute('stroke','#b7c6bf'); p.setAttribute('stroke-width','0.7');
+  });
+  clone.querySelectorAll('.plabel').forEach(t=>{
+    const fs = t.classList.contains('plabel-nk') ? '16' : (t.classList.contains('plabel-sm') ? '9' : '12');
+    t.setAttribute('fill','#5f7169'); t.setAttribute('font-size',fs); t.setAttribute('text-anchor','middle');
+    t.setAttribute('font-family',"'Pretendard','Apple SD Gothic Neo','Malgun Gothic',sans-serif");
+  });
+  clone.querySelectorAll('.pin').forEach(p=>{ p.setAttribute('stroke','#fff'); p.setAttribute('stroke-width','1.3'); });
+  // 아직 '지도에 추가'하지 않은 미리보기는 저장 이미지에서 뺌
+  clone.querySelectorAll('.cur, .pending-fill').forEach(n=>n.remove());
+  clone.querySelectorAll('.drawline').forEach(p=>{ p.setAttribute('fill','none'); p.setAttribute('stroke-width','3.2'); p.setAttribute('stroke-linecap','round'); p.setAttribute('stroke-linejoin','round'); p.removeAttribute('stroke-dasharray'); });
+  clone.querySelectorAll('.drawarea').forEach(p=>{ p.setAttribute('stroke-width','1.6'); p.setAttribute('stroke-linejoin','round'); p.setAttribute('fill-opacity','0.9'); });
+  // 오버레이 힌트 제거 (혹시 복제됐다면)
+  const ov=clone.querySelector('.draw-hint-overlay'); if(ov) ov.remove();
+  // <title> 자식 제거 (엄격한 XML 파서에서 문제가 될 수 있음) + 엄격 직렬화
+  clone.querySelectorAll('title').forEach(t=>t.remove());
+  let mapInner = '';
+  clone.childNodes.forEach(n=>{ mapInner += new XMLSerializer().serializeToString(n); });
+
+  // ----- 그린 선 종 이름 라벨 (저장 이미지에만 표시) -----
+  // 각 종의 그린 선마다 중간 지점에 종 이름을 흰색 외곽선과 함께 표시
+  let drawLabels = '';
+  entries.forEach(e=>{
+    (e.draws||[]).forEach(line=>{
+      if(!line || line.length<2) return;
+      const mid = line[Math.floor(line.length/2)];
+      const tx = mid.x + 8, ty = mid.y - 6;
+      // 흰색 halo(외곽선) + 종 색 텍스트
+      drawLabels += `<text x="${tx}" y="${ty}" font-family="${FONT}" font-size="12" font-weight="700" fill="#ffffff" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round" paint-order="stroke">${esc(e.name)}</text>`;
+      drawLabels += `<text x="${tx}" y="${ty}" font-family="${FONT}" font-size="12" font-weight="700" fill="${e.color}">${esc(e.name)}</text>`;
+    });
+    // 칠한 영역은 영역 위쪽 가운데에 종 이름
+    (e.areas||[]).forEach(a=>{
+      if(!a || a.length<3) return;
+      const xs=a.map(p=>p.x), ys=a.map(p=>p.y);
+      const tx=(Math.min(...xs)+Math.max(...xs))/2, ty=Math.min(...ys)-5;
+      drawLabels += `<text x="${tx}" y="${ty}" text-anchor="middle" font-family="${FONT}" font-size="12" font-weight="700" fill="#ffffff" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round" paint-order="stroke">${esc(e.name)}</text>`;
+      drawLabels += `<text x="${tx}" y="${ty}" text-anchor="middle" font-family="${FONT}" font-size="12" font-weight="700" fill="${e.color}">${esc(e.name)}</text>`;
+    });
+  });
+
+  // ----- 범례 영역 계산 -----
+  const legendTitleH = 26;
+  const chipH = 24, chipGap = 8;
+  // 범례 칩을 가로로 흘리며 줄바꿈 계산
+  const legendItems = entries.map((e,i)=>({name:e.name,color:e.color,hatch:e.hatch,idx:i}));
+  const availW = W - PAD*2;
+  function textW(s){ return s.length * 13.5 + 30; } // 대략적 칩 폭 (견본 + 텍스트 + 여백)
+  let lx=PAD, ly=0, legendLines=1;
+  const chipPos=[];
+  legendItems.forEach(it=>{
+    const w=textW(it.name);
+    if(lx+w > PAD+availW){ lx=PAD; ly+=chipH+chipGap; legendLines++; }
+    chipPos.push({x:lx,y:ly,w,...it});
+    lx+=w+chipGap;
+  });
+  const legendBlockH = legendItems.length ? (legendTitleH + legendLines*chipH + (legendLines-1)*chipGap + 8) : (legendTitleH+22);
+
+  // ----- 목록 표 영역 계산 -----
+  const listTitleH = 28;
+  const rowH = 34, thH = 32;
+  const cols = [ {t:'종', x:0, w:0.30}, {t:'분류군', x:0, w:0.16}, {t:'등급', x:0, w:0.12}, {t:'서식지', x:0, w:0.42} ];
+  let acc=PAD; cols.forEach(c=>{ c.px=acc; c.pw=availW*c.w; acc+=availW*c.w; });
+  const listBlockH = listTitleH + thH + Math.max(entries.length,0)*rowH + 12;
+
+  const footH = 40;  // 하단 날짜·출처 영역
+  const totalH = PAD + headerH + titleH + mapH + 22 + legendBlockH + 22 + listBlockH + footH + PAD;
+
+  // ----- 조각별 SVG 문자열 -----
+  let y = PAD;
+  let parts = [];
+  parts.push(`<rect x="0" y="0" width="${W}" height="${totalH}" fill="#ffffff"/>`);
+  // 범례·목록 견본용 빗금 패턴 정의 (지도용과 id 충돌 방지 위해 sv- 접두사)
+  let svDefs='';
+  entries.forEach((e,i)=>{ svDefs += hatchPatternDef('sv-hatch-'+i, e.color, e.hatch); });
+  parts.push(`<defs>${svDefs}</defs>`);
+
+  // 학번·이름
+  if(label){
+    parts.push(`<text x="${PAD}" y="${y+26}" font-family="${FONT}" font-size="22" font-weight="700" fill="#1a2e28">${esc(label)}</text>`);
+  }
+  y += headerH;
+
+  // 지도 제목
+  parts.push(`<text x="${PAD}" y="${y+18}" font-family="${FONT}" font-size="15" font-weight="700" fill="#1a2e28">서식지 분포 지도</text>`);
+  y += titleH;
+
+  // 지도 (원본 viewBox 좌표계를 그대로 y만큼 평행이동) + 그린 선 라벨
+  parts.push(`<g transform="translate(0.5,${y})">${mapInner}${drawLabels}</g>`);
+  y += mapH + 22;
+
+  // 범례
+  parts.push(`<text x="${PAD}" y="${y+16}" font-family="${FONT}" font-size="13" font-weight="700" fill="#4a5d56">표시한 종 (${entries.length}종)</text>`);
+  const legendBaseY = y + legendTitleH;
+  if(legendItems.length===0){
+    parts.push(`<text x="${PAD}" y="${legendBaseY+14}" font-family="${FONT}" font-size="13" fill="#9aa8a2">아직 표시한 종이 없습니다.</text>`);
+  } else {
+    chipPos.forEach(c=>{
+      const cy=legendBaseY + c.y + chipH/2;
+      // 빗금 견본 (13x13 사각형)
+      parts.push(`<rect x="${c.x}" y="${cy-6.5}" width="13" height="13" fill="#ffffff" stroke="#d8e0dc" stroke-width="1" rx="2"/>`);
+      parts.push(`<rect x="${c.x}" y="${cy-6.5}" width="13" height="13" fill="url(#sv-hatch-${c.idx})" rx="2"/>`);
+      parts.push(`<text x="${c.x+20}" y="${cy+4}" font-family="${FONT}" font-size="13" fill="#1a2e28">${esc(c.name)}</text>`);
+    });
+  }
+  y += legendBlockH + 22;
+
+  // 목록 표 제목
+  parts.push(`<text x="${PAD}" y="${y+18}" font-family="${FONT}" font-size="15" font-weight="700" fill="#1a2e28">내가 표시한 종 목록</text>`);
+  y += listTitleH;
+
+  // 표 헤더 배경
+  parts.push(`<rect x="${PAD}" y="${y}" width="${availW}" height="${thH}" fill="#f2f6f4"/>`);
+  cols.forEach(c=>{
+    parts.push(`<text x="${c.px+10}" y="${y+thH/2+4}" font-family="${FONT}" font-size="12" font-weight="700" fill="#4a5d56">${c.t}</text>`);
+  });
+  let ry = y + thH;
+
+  entries.forEach((e,i)=>{
+    if(i%2===1) parts.push(`<rect x="${PAD}" y="${ry}" width="${availW}" height="${rowH}" fill="#fafcfb"/>`);
+    const midY = ry+rowH/2+4;
+    // 종 (빗금 견본 + 이름)
+    parts.push(`<rect x="${cols[0].px+10}" y="${ry+rowH/2-6.5}" width="13" height="13" fill="#ffffff" stroke="#d8e0dc" stroke-width="1" rx="2"/>`);
+    parts.push(`<rect x="${cols[0].px+10}" y="${ry+rowH/2-6.5}" width="13" height="13" fill="url(#sv-hatch-${i})" rx="2"/>`);
+    parts.push(`<text x="${cols[0].px+30}" y="${midY}" font-family="${FONT}" font-size="13" fill="#1a2e28">${esc(e.name)}</text>`);
+    // 분류군
+    parts.push(`<text x="${cols[1].px+10}" y="${midY}" font-family="${FONT}" font-size="13" fill="#4a5d56">${esc(e.taxon)}</text>`);
+    // 등급 (배지)
+    const gcol = e.grade==='I' ? '#7a2622' : '#b5701e';
+    const gtext = e.grade+'급';
+    parts.push(`<rect x="${cols[2].px+10}" y="${ry+rowH/2-10}" width="34" height="20" rx="5" fill="${gcol}"/>`);
+    parts.push(`<text x="${cols[2].px+27}" y="${midY}" font-family="${FONT}" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">${esc(gtext)}</text>`);
+    // 서식지
+    let habitat = habitatText(e);
+    const maxChars = Math.floor(cols[3].pw/8.2);
+    if(habitat.length>maxChars) habitat = habitat.slice(0,maxChars-1)+'…';
+    parts.push(`<text x="${cols[3].px+10}" y="${midY}" font-family="${FONT}" font-size="13" fill="#4a5d56">${esc(habitat)}</text>`);
+    // 구분선
+    parts.push(`<line x1="${PAD}" y1="${ry+rowH}" x2="${PAD+availW}" y2="${ry+rowH}" stroke="#e8eeeb" stroke-width="1"/>`);
+    ry += rowH;
+  });
+  if(entries.length===0){
+    parts.push(`<text x="${PAD+availW/2}" y="${ry+22}" font-family="${FONT}" font-size="13" fill="#9aa8a2" text-anchor="middle">아직 추가한 종이 없습니다.</text>`);
+  }
+
+  // ----- 하단 날짜 · 출처 -----
+  const now=new Date();
+  const dateStr=`${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일`;
+  const footY = totalH - PAD - 8;
+  parts.push(`<line x1="${PAD}" y1="${footY-16}" x2="${PAD+availW}" y2="${footY-16}" stroke="#e8eeeb" stroke-width="1"/>`);
+  parts.push(`<text x="${PAD}" y="${footY}" font-family="${FONT}" font-size="12" fill="#6b7d76">작성일: ${dateStr}</text>`);
+  parts.push(`<text x="${PAD+availW}" y="${footY}" font-family="${FONT}" font-size="11" fill="#9aa8a2" text-anchor="end">자료: 국립생태원 멸종위기 야생생물</text>`);
+
+  const full = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${totalH}" viewBox="0 0 ${W} ${totalH}">${parts.join('')}</svg>`;
+
+  const img=new Image();
+  img.onload=()=>{
+    const scale=2, cv=document.createElement('canvas');
+    cv.width=W*scale; cv.height=totalH*scale;
+    const ctx=cv.getContext('2d');
+    ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.drawImage(img,0,0,cv.width,cv.height);
+    cv.toBlob(b=>{
+      const fname=(label?label.replace(/\s+/g,'_')+'_':'')+'멸종위기_야생생물_지도.png';
+      const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=fname; a.click();
+      showSaveModal(fname);
+    });
+  };
+  img.src='data:image/svg+xml;base64,'+btoa(unescape(encodeURIComponent(full)));
+});
+</script>
+</body>
+</html>
