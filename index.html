@@ -219,6 +219,14 @@
   .sm-steps{margin:0 0 12px; padding-left:20px; font-size:13px; line-height:1.7;}
   .sm-warn{font-size:12.5px; font-weight:600; color:var(--err-ink); background:var(--err-bg); border:1px solid var(--err-line); border-radius:8px; padding:8px 10px; margin-bottom:14px;}
   .modal-box #sm-ok{width:100%;}
+
+  .warn-box{border-top:5px solid #c2703d;}
+  .wm-body{font-size:13.5px; line-height:1.65; margin-bottom:16px;}
+  .wm-btns{display:flex; flex-direction:column; gap:8px;}
+  .wm-btns button{width:100%;}
+  @keyframes attnPulse{0%,100%{box-shadow:0 0 0 0 rgba(194,112,61,0);} 50%{box-shadow:0 0 0 7px rgba(194,112,61,.45);}}
+  #add.attn{animation:attnPulse .7s ease-in-out 4;}
+  @media (prefers-reduced-motion:reduce){ #add.attn{animation:none; outline:3px solid #c2703d;} }
 </style>
 </head>
 <body>
@@ -379,6 +387,14 @@
   </div>
 
   <div class="foot">경계 자료: 국토지리정보원 시도 경계(전남광주통합특별시 반영), 북한 도 경계 Natural Earth / 종 목록: 국립생태원 멸종위기 야생생물</div>
+
+  <div class="modal" id="warn-modal" role="alertdialog" aria-modal="true" aria-labelledby="wm-title">
+    <div class="modal-box warn-box">
+      <div class="sm-title" id="wm-title"></div>
+      <div class="wm-body" id="wm-body"></div>
+      <div class="wm-btns" id="wm-btns"></div>
+    </div>
+  </div>
 
   <div class="modal" id="save-modal" role="dialog" aria-modal="true" aria-labelledby="sm-title">
     <div class="modal-box">
@@ -909,7 +925,7 @@ document.getElementById('sm-ok').addEventListener('click', ()=>saveModal.classLi
 saveModal.addEventListener('click', e=>{ if(e.target===saveModal) saveModal.classList.remove('show'); });
 document.addEventListener('keydown', e=>{ if(e.key==='Escape') saveModal.classList.remove('show'); });
 
-document.getElementById('save').addEventListener('click',()=>{
+function doSave(){
   const no=(document.getElementById('stu-no').value||'').trim();
   const nm=(document.getElementById('stu-name').value||'').trim();
   const label=[no,nm].filter(Boolean).join(' ');
@@ -1096,6 +1112,53 @@ document.getElementById('save').addEventListener('click',()=>{
     });
   };
   img.src='data:image/svg+xml;base64,'+btoa(unescape(encodeURIComponent(full)));
+}
+
+// ---------- 저장 전 확인: '지도에 추가'를 안 눌렀으면 경고 ----------
+const warnModal = document.getElementById('warn-modal');
+function closeWarn(){ warnModal.classList.remove('show'); }
+function flashAddButton(){
+  const btn=document.getElementById('add');
+  btn.scrollIntoView({behavior:'smooth', block:'center'});
+  btn.classList.remove('attn'); void btn.offsetWidth; btn.classList.add('attn');
+}
+function openWarn(title, bodyHtml, buttons){
+  document.getElementById('wm-title').textContent = title;
+  document.getElementById('wm-body').innerHTML = bodyHtml;
+  const wrap = document.getElementById('wm-btns'); wrap.innerHTML='';
+  buttons.forEach(b=>{
+    const el=document.createElement('button');
+    el.className = b.primary ? 'b-primary' : 'b-ghost';
+    el.textContent = b.label;
+    el.addEventListener('click', ()=>{ closeWarn(); b.action && b.action(); });
+    wrap.appendChild(el);
+  });
+  warnModal.classList.add('show');
+  wrap.querySelector('button').focus();
+}
+warnModal.addEventListener('click', e=>{ if(e.target===warnModal) closeWarn(); });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeWarn(); });
+
+document.getElementById('save').addEventListener('click', ()=>{
+  const pendingCount = pickedRegions.size + currentAreas.length + currentDraws.length;
+  if(picked && pendingCount>0){
+    const what=[];
+    if(pickedRegions.size) what.push(`고른 지역 ${pickedRegions.size}곳`);
+    if(currentAreas.length) what.push(`칠한 영역 ${currentAreas.length}곳`);
+    if(currentDraws.length) what.push(`그린 선 ${currentDraws.length}개`);
+    openWarn('아직 지도에 추가하지 않았어요',
+      `<b>${esc(picked.name)}</b>(${what.join(', ')})은 아직 <b>‘지도에 추가’</b> 버튼을 누르지 않아서 저장 이미지에 나오지 않아요.`,
+      [{label:'지도에 추가하고 저장', primary:true, action:()=>{ document.getElementById('add').click(); doSave(); }},
+       {label:'돌아가기', action:flashAddButton}]);
+    return;
+  }
+  if(entries.length===0){
+    openWarn('지도에 추가된 종이 없어요',
+      `종을 고르고 서식지를 표시한 뒤 <b>‘지도에 추가’</b> 버튼을 눌러야 지도에 반영돼요. 지금 저장하면 빈 지도만 저장됩니다.`,
+      [{label:'돌아가기', primary:true, action:()=>{ if(picked) flashAddButton(); else document.getElementById('q').focus(); }}]);
+    return;
+  }
+  doSave();
 });
 </script>
 </body>
