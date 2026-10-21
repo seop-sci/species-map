@@ -254,6 +254,20 @@
   .plabel{stroke:#fff; stroke-width:calc(3px * var(--ls,1)); stroke-linejoin:round; paint-order:stroke; fill:#4a5d56;}
   .prov, .drawline, .drawarea, .pending-fill{vector-effect:non-scaling-stroke;}
   svg#map{-webkit-user-select:none; user-select:none; -webkit-touch-callout:none;}
+
+  /* ---------- 고치기, 지우개 ---------- */
+  .edit-bar{display:none; margin-top:10px; padding:9px 10px; border-radius:8px; background:#fff7ec; border:1px solid #efc88f;
+    font-size:12px; color:#8a4a1c; line-height:1.5;}
+  .edit-bar.show{display:block;}
+  .edit-bar #edit-cancel{display:block; margin-top:7px;}
+  .tool-tabs button{min-width:0;}
+  svg#map.drawing.erasing{cursor:pointer;}
+  td.row-btns{text-align:right; white-space:nowrap;}
+  .edit{padding:4px 9px; background:#fff; border:1px solid var(--line); border-radius:6px; color:var(--accent-dark);
+    cursor:pointer; font-size:11px; font-weight:600; margin-right:5px;}
+  .edit:hover{background:#eaf4ef; border-color:var(--accent);}
+  tr.editing-row td{background:#fff7ec;}
+  .editing-tag{display:inline-block; font-size:10.5px; font-weight:700; color:#8a4a1c; background:#f6e7db; border-radius:10px; padding:1px 7px; margin-left:4px;}
 </style>
 </head>
 <body>
@@ -335,6 +349,10 @@
           <span class="grade" id="p-grade"></span>
         </div>
         <div class="sp-sci" id="p-sci"></div>
+        <div class="edit-bar" id="edit-bar">
+          <span>지도에 추가한 이 종을 <b>고치는 중</b>이에요. 지역을 빼거나 더하고, 그린 것은 지우개로 지울 수 있어요.</span>
+          <button class="b-ghost b-sm" id="edit-cancel">고치기 취소</button>
+        </div>
       </div>
 
       <div class="region-box" id="region-box">
@@ -363,6 +381,7 @@
           <div class="tool-tabs">
             <button id="tool-area" class="on">영역 칠하기<small>도의 일부에 살 때</small></button>
             <button id="tool-line">선 그리기<small>강이나 하천을 따라 살 때</small></button>
+            <button id="tool-erase">지우개<small>잘못 그린 것을 눌러 지우기</small></button>
           </div>
           <div class="hint" id="tool-hint"></div>
           <div class="draw-tools">
@@ -377,7 +396,7 @@
 
       <div class="add-guide" id="add-guide">
         <span class="ag-icon">⬇️</span>
-        <span>지역을 고르거나 지도에 그린 뒤, 아래 <b>‘지도에 추가’</b> 버튼을 눌러야 지도에 표시됩니다. 점선으로 보이는 것은 아직 추가 전이에요.</span>
+        <span id="add-guide-text">지역을 고르거나 지도에 그린 뒤, 아래 <b>‘지도에 추가’</b> 버튼을 눌러야 지도에 표시됩니다. 점선으로 보이는 것은 아직 추가 전이에요.</span>
       </div>
 
       <div class="btns">
@@ -478,7 +497,8 @@ let currentAreas = [];      // 현재 편집 중인 종의 칠한 영역들 [[{x
 let curPath = null;         // 그리는 중인 선 또는 영역
 let drawing = false;
 let mode = 'region';
-let drawTool = 'area';      // 'area' 영역 칠하기 | 'line' 선 그리기
+let drawTool = 'area';      // 'area' 영역 칠하기 | 'line' 선 그리기 | 'erase' 지우개
+let editing = null;         // 고치는 중인 종 이름 (이미 지도에 추가한 종)
 let entries = [];           // {name,sci,taxon,grade,regions:[], draws:[[{x,y}]], areas:[[{x,y}]], color, hatch}
 let colorIdx = 0;
 
@@ -610,11 +630,12 @@ function attachDrawEvents(){
     try{ svg.setPointerCapture(e.pointerId); }catch(err){}
     if(pts.size===2){ startPinch(); return; }
     if(pts.size>2) return;
-    if(mode==='draw' && picked && !panTool){
+    if(mode==='draw' && picked && !panTool && drawTool!=='erase'){
       e.preventDefault(); drawing=true; g={type:'draw'};
       curPath=[toSvgXY(e)]; renderDrawsLive();
     } else {
-      g = {type:'pan', sx:e.clientX, sy:e.clientY, v0:{...view}, moved:false, lastY:e.clientY, touch:e.pointerType!=='mouse'};
+      g = {type:'pan', sx:e.clientX, sy:e.clientY, v0:{...view}, moved:false, lastY:e.clientY, touch:e.pointerType!=='mouse',
+           erase: mode==='draw' && picked && drawTool==='erase' && !panTool};
     }
   });
   svg.addEventListener('pointermove', e=>{
@@ -653,6 +674,7 @@ function attachDrawEvents(){
     }
     if(g.type==='pinch'){ g = pts.size ? {type:'idle'} : null; return; }
     if(g.type==='pan'){
+      if(!g.moved && e.type!=='pointercancel' && g.erase){ eraseAt(toSvgXY(e)); g=null; return; }
       if(!g.moved && e.type!=='pointercancel' && mode==='region'){
         const el = document.elementFromPoint(e.clientX, e.clientY);
         const t = el && el.closest ? el.closest('.prov') : null;
@@ -680,6 +702,37 @@ function pathD(pts){
   if(!pts.length) return '';
   return 'M'+pts.map(p=>`${p.x},${p.y}`).join('L');
 }
+// 지우개: 누른 곳에 있는 칠한 영역이나 선을 찾아 하나 지움 (선 먼저, 그다음 작은 영역부터)
+function pointInPoly(pt, poly){
+  let inside=false;
+  for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+    const a=poly[i], b=poly[j];
+    if(((a.y>pt.y)!==(b.y>pt.y)) && (pt.x < (b.x-a.x)*(pt.y-a.y)/(b.y-a.y)+a.x)) inside=!inside;
+  }
+  return inside;
+}
+function distToLine(pt, line){
+  let best=Infinity;
+  for(let i=1;i<line.length;i++){
+    const a=line[i-1], b=line[i], dx=b.x-a.x, dy=b.y-a.y, L=dx*dx+dy*dy;
+    let t = L ? ((pt.x-a.x)*dx+(pt.y-a.y)*dy)/L : 0; t=Math.max(0,Math.min(1,t));
+    best=Math.min(best, Math.hypot(pt.x-(a.x+t*dx), pt.y-(a.y+t*dy)));
+  }
+  return best;
+}
+function eraseAt(pt){
+  const tol = 12 / svgBox(view).k;          // 화면에서 손가락 굵기 정도
+  let li=-1, ld=Infinity;
+  currentDraws.forEach((l,i)=>{ const d=distToLine(pt,l); if(d<tol && d<ld){ ld=d; li=i; } });
+  if(li>=0){ currentDraws.splice(li,1); showMsg('ok','그린 선 1개를 지웠어요. 다 고쳤으면 아래 버튼을 눌러 반영하세요.'); }
+  else {
+    let ai=-1, aa=Infinity;
+    currentAreas.forEach((a,i)=>{ if(pointInPoly(pt,a) || distToLine(pt,[...a,a[0]])<tol){ const ar=polyArea(a); if(ar<aa){ aa=ar; ai=i; } } });
+    if(ai>=0){ currentAreas.splice(ai,1); showMsg('ok','칠한 영역 1곳을 지웠어요. 다 고쳤으면 아래 버튼을 눌러 반영하세요.'); }
+    else { showMsg('warn','지울 것이 없어요. 지금 고르고 있는 종의 칠한 영역이나 선 위를 눌러 주세요.'); return; }
+  }
+  renderDrawsLive(); updateDrawStatus(); updateAddBtn();
+}
 function polyArea(pts){
   let a=0; for(let i=0;i<pts.length;i++){ const p=pts[i], q2=pts[(i+1)%pts.length]; a+=p.x*q2.y-q2.x*p.y; }
   return Math.abs(a/2);
@@ -697,11 +750,11 @@ function renderDrawsLive(){
   document.getElementById('cur-defs').innerHTML = hatchPatternDef('hatch-cur', st.color, st.hatch);
   applyViewStyles();
   let out='';
-  entries.forEach((e,i)=>{ (e.areas||[]).forEach(a=>{
+  entries.forEach((e,i)=>{ if(e.name===editing) return; (e.areas||[]).forEach(a=>{
     out += `<path class="drawarea" d="${pathD(a)}Z" fill="url(#hatch-${i})" stroke="${e.color}"/>`;
   }); });
   currentAreas.forEach(a=>{ out += `<path class="drawarea cur" d="${pathD(a)}Z" fill="url(#hatch-cur)" stroke="${st.color}" stroke-dasharray="6,4"/>`; });
-  entries.forEach(e=>{ (e.draws||[]).forEach(line=>{
+  entries.forEach(e=>{ if(e.name===editing) return; (e.draws||[]).forEach(line=>{
     out += `<path class="drawline" d="${pathD(line)}" stroke="${e.color}"/>`;
   }); });
   currentDraws.forEach(line=>{ out += `<path class="drawline cur" d="${pathD(line)}" stroke="${st.color}"/>`; });
@@ -738,7 +791,7 @@ function drawAll(){
 
   // 2) 지역별로, 그 지역에 사는 각 종의 빗금을 겹쳐 그림
   const byRegion={};
-  entries.forEach((e,idx)=>{ (e.regions||[]).forEach(r=>{ (byRegion[r]=byRegion[r]||[]).push(idx); }); });
+  entries.forEach((e,idx)=>{ if(e.name===editing) return; (e.regions||[]).forEach(r=>{ (byRegion[r]=byRegion[r]||[]).push(idx); }); });
   let fills='';
   Object.keys(byRegion).forEach(r=>{
     const paths=REGION_PATHS[r]; if(!paths) return;
@@ -804,6 +857,11 @@ document.addEventListener('click',e=>{ if(!e.target.closest('.ac')) sugBox.class
 
 // ---------- 종 선택 ----------
 function choose(sp){
+  // 이미 지도에 추가한 종을 다시 고르면, 지금 표시된 내용을 불러와 고치기
+  const ex = entries.find(e=>e.name===sp.name);
+  if(ex){ startEdit(ex); return; }
+  if(editing && !confirm(`${editing}을(를) 고치던 내용은 반영되지 않아요. ${sp.name}(으)로 넘어갈까요?`)){ q.value=editing; sugBox.classList.remove('show'); return; }
+  setEditing(null);
   picked=sp; pickedRegions=new Set(); currentDraws=[]; currentAreas=[]; curPath=null;
   q.value=sp.name; sugBox.classList.remove('show');
   document.getElementById('p-name').textContent=sp.name;
@@ -816,6 +874,45 @@ function choose(sp){
   document.getElementById('add-guide').classList.add('show');
   setMode('region');
   updateDrawStatus(); updateAddBtn(); clearMsg(); renderDrawsLive(); renderPending();
+}
+const clonePts = list => (list||[]).map(l=>l.map(p=>({x:p.x, y:p.y})));
+function setEditing(name){
+  editing = name;
+  document.getElementById('edit-bar').classList.toggle('show', !!name);
+  document.getElementById('add').textContent = name ? '고친 내용 반영' : '지도에 추가';
+  document.getElementById('add-guide-text').innerHTML = name
+    ? `다 고쳤으면 아래 <b>‘고친 내용 반영’</b> 버튼을 눌러야 지도에 적용됩니다. 점선으로 보이는 것은 아직 반영 전이에요.`
+    : `지역을 고르거나 지도에 그린 뒤, 아래 <b>‘지도에 추가’</b> 버튼을 눌러야 지도에 표시됩니다. 점선으로 보이는 것은 아직 추가 전이에요.`;
+}
+function startEdit(ex){
+  const sp = SPECIES_BY_NAME[ex.name]; if(!sp) return;
+  // 다른 종을 고르던 중이면 확인
+  if(picked && picked.name!==ex.name && (editing || pickedRegions.size||currentAreas.length||currentDraws.length)){
+    const why = editing ? `${picked.name}을(를) 고치던 내용은 반영되지 않아요.` : `${picked.name}은(는) 아직 지도에 추가하지 않았어요.`;
+    if(!confirm(`${why} ${ex.name}(으)로 넘어갈까요?`)) return;
+  }
+  setEditing(ex.name);
+  picked=sp; curPath=null;
+  pickedRegions=new Set(ex.regions||[]); currentDraws=clonePts(ex.draws); currentAreas=clonePts(ex.areas);
+  q.value=sp.name; sugBox.classList.remove('show');
+  document.getElementById('p-name').textContent=sp.name;
+  document.getElementById('p-sci').textContent=sp.sci||'';
+  document.getElementById('p-taxon').textContent=sp.taxon;
+  const g=document.getElementById('p-grade'); g.className='grade '+sp.grade; g.textContent=sp.grade+'급';
+  document.getElementById('picked').classList.add('show');
+  buildChips(); syncChips();
+  document.getElementById('region-box').classList.add('show');
+  document.getElementById('add-guide').classList.add('show');
+  setMode((ex.regions||[]).length || !(ex.areas||[]).length && !(ex.draws||[]).length ? 'region' : 'draw');
+  clearMsg(); updateDrawStatus(); updateAddBtn(); drawAll(); renderPending(); renderTable();
+  document.getElementById('input-card').scrollIntoView({behavior:'smooth', block:'start'});
+}
+function endPicking(){
+  picked=null; pickedRegions=new Set(); currentDraws=[]; currentAreas=[]; curPath=null; q.value='';
+  setEditing(null); renderPending();
+  document.getElementById('picked').classList.remove('show');
+  document.getElementById('region-box').classList.remove('show'); document.getElementById('add-guide').classList.remove('show');
+  setMode('region');
 }
 function buildChips(){
   const chip = r=>`<span class="chip" data-r="${r}">${r}</span>`;
@@ -833,7 +930,8 @@ function toggleRegion(r){
   syncChips(); updateAddBtn(); renderPending();
 }
 function updateAddBtn(){
-  document.getElementById('add').disabled = !(picked && (pickedRegions.size>0 || currentDraws.length>0 || currentAreas.length>0));
+  // 고치는 중에는 모두 지워도 반영할 수 있음 (그러면 목록에서 빼기)
+  document.getElementById('add').disabled = !(picked && (editing || pickedRegions.size>0 || currentDraws.length>0 || currentAreas.length>0));
 }
 // 칩 on/off 상태를 pickedRegions에 맞춰 갱신
 function syncChips(){
@@ -856,6 +954,7 @@ document.getElementById('clear-all').addEventListener('click',()=>{
   pickedRegions.clear(); syncChips(); updateAddBtn(); renderPending();
 });
 document.getElementById('go-draw').addEventListener('click',()=>{ if(picked){ setDrawTool('area'); setMode('draw'); } });
+document.getElementById('edit-cancel').addEventListener('click',()=>{ const n=editing; endPicking(); refresh(); showMsg('ok',`${n} 고치기를 취소했어요. 고치기 전 내용 그대로예요.`); });
 
 // ---------- 모드 전환 ----------
 function setMode(m){
@@ -872,15 +971,20 @@ function setDrawTool(t){
   drawTool=t;
   document.getElementById('tool-area').classList.toggle('on',t==='area');
   document.getElementById('tool-line').classList.toggle('on',t==='line');
-  document.getElementById('tool-hint').innerHTML = t==='area'
-    ? '서식지가 <b>도의 일부</b>일 때 씁니다. 지도 위에서 서식지를 따라 <b>동그랗게</b> 그리면 안쪽이 이 종의 빗금으로 칠해져요. 여러 곳을 칠할 수 있어요.'
-    : '<b>강이나 하천</b>을 따라 사는 종일 때 씁니다. 지도 위에서 물줄기를 따라 선을 그어 주세요.';
-  document.getElementById('draw-overlay').textContent = t==='area'
-    ? '영역 칠하기: 서식지를 따라 동그랗게 그려 주세요'
-    : '선 그리기: 강을 따라 그어 주세요';
+  document.getElementById('tool-erase').classList.toggle('on',t==='erase');
+  svgEl().classList.toggle('erasing', t==='erase');
+  document.getElementById('tool-hint').innerHTML = {
+    area:'서식지가 <b>도의 일부</b>일 때 씁니다. 지도 위에서 서식지를 따라 <b>동그랗게</b> 그리면 안쪽이 이 종의 빗금으로 칠해져요. 여러 곳을 칠할 수 있어요.',
+    line:'<b>강이나 하천</b>을 따라 사는 종일 때 씁니다. 지도 위에서 물줄기를 따라 선을 그어 주세요.',
+    erase:'지금 고르고 있는 종의 <b>칠한 영역이나 선을 누르면</b> 하나씩 지워져요. 지역 선택은 ‘지역 선택’ 탭에서 다시 눌러 끄면 됩니다.'}[t];
+  document.getElementById('draw-overlay').textContent = {
+    area:'영역 칠하기: 서식지를 따라 동그랗게 그려 주세요',
+    line:'선 그리기: 강을 따라 그어 주세요',
+    erase:'지우개: 지울 영역이나 선을 눌러 주세요'}[t];
 }
 document.getElementById('tool-area').addEventListener('click',()=>setDrawTool('area'));
 document.getElementById('tool-line').addEventListener('click',()=>setDrawTool('line'));
+document.getElementById('tool-erase').addEventListener('click',()=>setDrawTool('erase'));
 setDrawTool('area');
 document.getElementById('zoom-in').addEventListener('click', ()=>zoomCenter(1/1.6));
 document.getElementById('zoom-out').addEventListener('click', ()=>zoomCenter(1.6));
@@ -903,12 +1007,23 @@ function clearMsg(){ msg.className='msg'; msg.textContent=''; }
 
 // ---------- 추가 ----------
 document.getElementById('add').addEventListener('click',()=>{
-  if(!picked || (pickedRegions.size===0 && currentDraws.length===0 && currentAreas.length===0)) return;
+  const empty = pickedRegions.size===0 && currentDraws.length===0 && currentAreas.length===0;
+  if(!picked || (empty && !editing)) return;
   const regions=[...pickedRegions];
   const draws=currentDraws.map(l=>l.slice());
   const areas=currentAreas.map(l=>l.slice());
   const exist=entries.find(e=>e.name===picked.name);
-  if(exist){
+  if(exist && editing===exist.name){
+    // 고치기: 지금 화면에 있는 내용으로 바꿈
+    if(empty){
+      if(!confirm(`${exist.name}의 서식지를 모두 지웠어요. 목록에서 ${exist.name}을(를) 뺄까요?`)) return;
+      entries.splice(entries.indexOf(exist),1);
+      showMsg('ok',`${exist.name}을(를) 지도와 목록에서 뺐어요.`);
+    } else {
+      exist.regions=regions; exist.draws=draws; exist.areas=areas;
+      showMsg('ok',`${exist.name}의 서식지를 고쳤어요.`);
+    }
+  } else if(exist){
     exist.regions=[...new Set([...(exist.regions||[]),...regions])];
     exist.draws=[...(exist.draws||[]),...draws];
     exist.areas=[...(exist.areas||[]),...areas];
@@ -920,15 +1035,12 @@ document.getElementById('add').addEventListener('click',()=>{
     showMsg('ok',`${picked.name}을(를) 지도에 추가했습니다.`);
   }
   // 초기화
-  picked=null; pickedRegions=new Set(); currentDraws=[]; currentAreas=[]; curPath=null; q.value=''; renderPending();
-  document.getElementById('picked').classList.remove('show');
-  document.getElementById('region-box').classList.remove('show'); document.getElementById('add-guide').classList.remove('show');
-  setMode('region');
+  endPicking();
   refresh(); updateAddBtn();
 });
 document.getElementById('reset').addEventListener('click',()=>{
   if(entries.length && !confirm('표시한 종을 모두 지울까요?')) return;
-  entries=[]; colorIdx=0; picked=null; pickedRegions=new Set(); currentDraws=[]; currentAreas=[]; curPath=null; q.value=''; renderPending();
+  entries=[]; colorIdx=0; picked=null; pickedRegions=new Set(); currentDraws=[]; currentAreas=[]; curPath=null; q.value=''; setEditing(null); renderPending();
   document.getElementById('picked').classList.remove('show');
   document.getElementById('region-box').classList.remove('show'); document.getElementById('add-guide').classList.remove('show');
   setMode('region'); clearMsg(); updateAddBtn(); refresh();
@@ -955,15 +1067,21 @@ function renderTable(){
   if(entries.length===0){ tbody.innerHTML=''; table.style.display='none'; empty.style.display='block'; return; }
   table.style.display='table'; empty.style.display='none';
   tbody.innerHTML=entries.map((e,i)=>{
-    return `<tr>
-      <td>${hatchSwatch(e.color, e.hatch, 'tb-hatch-'+i)} ${e.name}</td>
+    return `<tr${e.name===editing?' class="editing-row"':''}>
+      <td>${hatchSwatch(e.color, e.hatch, 'tb-hatch-'+i)} ${e.name}${e.name===editing?' <span class="editing-tag">고치는 중</span>':''}</td>
       <td>${e.taxon}</td>
       <td><span class="grade ${e.grade}">${e.grade}급</span></td>
       <td class="rlist">${habitatText(e)}</td>
-      <td style="text-align:right;"><button class="del" data-i="${i}">삭제</button></td>
+      <td class="row-btns"><button class="edit" data-i="${i}">고치기</button><button class="del" data-i="${i}">삭제</button></td>
     </tr>`;
   }).join('');
-  tbody.querySelectorAll('.del').forEach(b=>b.addEventListener('click',()=>{ entries.splice(+b.dataset.i,1); refresh(); }));
+  tbody.querySelectorAll('.edit').forEach(b=>b.addEventListener('click',()=>startEdit(entries[+b.dataset.i])));
+  tbody.querySelectorAll('.del').forEach(b=>b.addEventListener('click',()=>{
+    const e=entries[+b.dataset.i];
+    if(!confirm(`${e.name}을(를) 지도와 목록에서 지울까요?`)) return;
+    if(e.name===editing) endPicking();
+    entries.splice(+b.dataset.i,1); refresh();
+  }));
 }
 // ---------- 자동 저장 (새로고침해도 유지) ----------
 const STORE_KEY = 'endangered-species-map:v1';
@@ -1030,6 +1148,7 @@ function hideBanner(){ document.getElementById('restore-banner').classList.remov
 document.getElementById('keep-work').addEventListener('click', hideBanner);
 document.getElementById('start-new').addEventListener('click', ()=>{
   if(!confirm('이전 작업(학번, 이름, 표시한 종)을 모두 지우고 새로 시작할까요?')) return;
+  endPicking();
   entries=[]; colorIdx=0; stuNoEl.value=''; stuNameEl.value='';
   try{ localStorage.removeItem(STORE_KEY); }catch(err){}
   hideBanner(); clearMsg(); refresh();
@@ -1062,7 +1181,7 @@ importFileEl.addEventListener('change', ()=>{
       return;
     }
     if(entries.length && !confirm('지금 지도에 있는 내용이 불러온 파일 내용으로 바뀝니다. 계속할까요?')) return;
-    applyState(d); hideBanner(); clearMsg(); refresh();
+    endPicking(); applyState(d); hideBanner(); clearMsg(); refresh();
     setSaveStatus(`작업 파일을 불러왔어요 (${entries.length}종).`);
   };
   reader.readAsText(f);
@@ -1303,6 +1422,13 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeWarn(); });
 
 document.getElementById('save').addEventListener('click', ()=>{
   const pendingCount = pickedRegions.size + currentAreas.length + currentDraws.length;
+  if(editing){
+    openWarn('고치는 중인 종이 있어요',
+      `<b>${esc(editing)}</b>을(를) 고치는 중이에요. <b>‘고친 내용 반영’</b>을 눌러야 저장 이미지에 제대로 나와요.`,
+      [{label:'반영하고 저장', primary:true, action:()=>{ document.getElementById('add').click(); if(!editing) doSave(); }},
+       {label:'돌아가기', action:flashAddButton}]);
+    return;
+  }
   if(picked && pendingCount>0){
     const what=[];
     if(pickedRegions.size) what.push(`고른 지역 ${pickedRegions.size}곳`);
